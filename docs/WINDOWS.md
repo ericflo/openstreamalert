@@ -5,14 +5,15 @@ install it, connect Twitch with a one-time code, and paste the displayed URL int
 OBS. It bundles its own runtime—Node.js, Docker, a terminal, OpenSSL, and a Twitch
 client secret are not required.
 
-OpenStreamAlert is still pre-release, so a signed public installer is not yet
-published. The repository already builds and smoke-tests the complete Windows
-package on a pinned Windows 2022 toolchain; the live Windows/Twitch/OBS acceptance gate and code
-signing must pass before that artifact becomes a supported download.
+OpenStreamAlert is still pre-release. An [unsigned 0.1.1 Windows
+preview](https://github.com/ericflo/openstreamalert/releases/tag/windows-preview-0.1.1)
+is available for early adopters. CI builds the package and smoke-tests its local
+runtime on a pinned Windows 2022 toolchain. Code signing and the full
+Windows/Twitch/OBS acceptance matrix must pass before a supported beta.
 
 ## Streamer quick start
 
-Once the signed beta is published:
+For the public preview:
 
 1. Download `OpenStreamAlert-Setup-x64.exe` from the GitHub release and run it.
    The per-user installer does not require administrator access.
@@ -69,14 +70,15 @@ The Squirrel installer, update package, and portable ZIP appear under
 development.
 
 For repository builds, set `TWITCH_DESKTOP_CLIENT_ID` as a GitHub Actions
-repository variable. Private-repository CI artifacts are deliberately unsigned
-test evidence; do not ask users to bypass SmartScreen for them.
+repository variable. Ordinary CI builds packages only for automated smoke
+testing and does not publish them as downloads.
 
 ## Signing and release policy
 
-A public Windows release is blocked unless both the installed executable and
+A supported Windows beta is blocked unless both the installed executable and
 installer have a valid timestamped Authenticode signature from the configured
-publisher. The release workflow requires:
+publisher. The current early preview is explicitly unsigned. The signed-release
+workflow requires:
 
 - secret `WINDOWS_CERTIFICATE_BASE64`;
 - secret `WINDOWS_CERTIFICATE_PASSWORD`;

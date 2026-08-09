@@ -13,11 +13,10 @@ releases exist, this table will identify the supported lines explicitly.
 
 ## Reporting a vulnerability
 
-When GitHub displays **Security → Report a vulnerability**, use it to open a
-private security advisory. GitHub does not currently expose that feature on this
-private repository plan. Until it is available, request a private contact
-channel through the maintainer's GitHub profile or open an issue containing no
-vulnerability details. Never paste credentials or include a live overlay URL.
+Use [GitHub's private vulnerability-reporting
+form](https://github.com/ericflo/openstreamalert/security/advisories/new). Do not
+open a public issue for a suspected vulnerability. Never paste credentials or
+include a live overlay URL.
 
 Include the affected commit, impact, smallest reproduction, and any suggested
 mitigation. You should receive an acknowledgement within three business days.

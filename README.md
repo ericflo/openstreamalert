@@ -8,6 +8,9 @@
 [![MIT](https://img.shields.io/badge/license-MIT-a78bfa.svg)](LICENSE)
 [![Node 24+](https://img.shields.io/badge/node-24%2B-67e8b0.svg)](package.json)
 
+[**Try the live design demo**](https://ericflo.github.io/openstreamalert/) ·
+[**Download the Windows preview**](https://github.com/ericflo/openstreamalert/releases/tag/windows-preview-0.1.1)
+
 </div>
 
 ![OpenStreamAlert design studio](docs/assets/studio.png)
@@ -40,13 +43,21 @@ analytics, and does not put Twitch credentials in the OBS URL.
 
 ## Quick start
 
-### Windows desktop
+### Try it in your browser
 
-The primary Windows path is a self-contained tray application: install, approve
-Twitch with a one-time code, and copy the OBS URL. It requires no Node.js,
-Docker, terminal, OpenSSL, or embedded client secret. The installer is already
-built and smoke-tested in CI, but remains pre-release until Windows code signing
-and the live Twitch/OBS gate pass. See the [Windows guide](docs/WINDOWS.md).
+Open the [credential-free design demo](https://ericflo.github.io/openstreamalert/)
+to try every theme and control immediately. It is a visual product tour with
+fixture messages—not a Twitch login or live-chat service.
+
+### Windows desktop preview
+
+The easiest live-chat path is the self-contained Windows tray application:
+install, approve Twitch with a one-time code, and copy the OBS URL. It requires
+no Node.js, Docker, terminal, OpenSSL, or embedded client secret. Download the
+[0.1.1 Windows preview](https://github.com/ericflo/openstreamalert/releases/tag/windows-preview-0.1.1).
+This first public preview is unsigned and may trigger Microsoft Defender
+SmartScreen; verify its published SHA-256 checksum. A signed beta remains the
+next distribution milestone. See the [Windows guide](docs/WINDOWS.md).
 
 ### Source and server demo
 
@@ -167,15 +178,14 @@ and the source-backed [research notes](docs/RESEARCH.md) for the details.
 
 ## Status and roadmap
 
-OpenStreamAlert is working pre-release software, with no tagged release yet.
-Automated tests cover its demo and container paths, but the Twitch connection
-requires a real developer application and account. The live OAuth → EventSub →
-OBS acceptance checklist must pass before any release is tagged; see
-[Releasing](docs/RELEASING.md).
+OpenStreamAlert is working pre-release software. The unsigned Windows preview
+is for early adopters; it is not a stable release. Automated tests cover the
+studio, overlay, Twitch protocol state machine, Windows package, and container.
+The complete cross-platform live OAuth → EventSub → OBS acceptance checklist
+must pass before a signed stable release; see [Releasing](docs/RELEASING.md).
 
-CodeQL and dependency review are prepared and activate when the repository
-becomes public; GitHub does not provide their code-scanning backend to this
-private repository without GHAS.
+Public pushes are analyzed by CodeQL, and pull requests run dependency review.
+Security reports should use GitHub's private vulnerability-reporting form.
 
 The next priorities are a signed Windows beta, third-party emote adapters (7TV,
 BTTV, FFZ), multiple simultaneous scene profiles, and richer operator diagnostics.

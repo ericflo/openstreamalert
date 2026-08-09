@@ -14,16 +14,14 @@ credential, or server-side overlay key.
 
 ## GitHub Pages deployment
 
+The public demo is deployed at
+[ericflo.github.io/openstreamalert](https://ericflo.github.io/openstreamalert/).
 The `Public demo` workflow builds the studio with `VITE_PUBLIC_DEMO=1` and a
-repository-relative asset base. While the repository is private, it still builds
-and retains the exact Pages artifact, but the deployment job is skipped. This
-provides a credential-free packaging check before changing visibility. After
-making the repository public:
+repository-relative asset base, then deploys it through GitHub Pages:
 
-1. In **Settings → Pages**, choose **GitHub Actions** as the source.
-2. Run the **Public demo** workflow once, or push to `main`.
-3. Verify the URL reported by the workflow at desktop and mobile widths.
-4. Open a copied demo URL directly and confirm that the transparent overlay
+1. Push to `main`, or run the **Public demo** workflow manually.
+2. Verify the URL reported by the workflow at desktop and mobile widths.
+3. Open a copied demo URL directly and confirm that the transparent overlay
    renders after a hard refresh.
 
 The workflow copies `index.html` to `404.html` so GitHub Pages can serve the

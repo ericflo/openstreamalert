@@ -180,7 +180,9 @@ jobs:
             "$hash  $($asset.Name)"
           }
           $lines | Set-Content out/make/SHA256SUMS-windows.txt -Encoding ascii
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Upload signed release packages
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-release
           path: |
@@ -189,6 +191,17 @@ jobs:
             out/make/SHA256SUMS-windows.txt
           if-no-files-found: error
           retention-days: 14
+      - name: Upload unsigned dry-run evidence
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: UNSIGNED-TEST-ONLY-windows-dry-run-${{ github.sha }}
+          path: |
+            out/make/squirrel.windows/x64/*
+            out/make/zip/win32/x64/*
+            out/make/SHA256SUMS-windows.txt
+          if-no-files-found: error
+          retention-days: 3
       - name: Remove signing material
         if: github.event_name == 'push' && always()
         shell: pwsh
