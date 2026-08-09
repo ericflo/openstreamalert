@@ -172,6 +172,7 @@ and the source-backed [research notes](docs/RESEARCH.md) for the details.
 - [Product scope and principles](docs/PRODUCT.md)
 - [Credential-free public demo deployment](docs/PUBLIC_DEMO.md)
 - [Windows installer, tray lifecycle, and source builds](docs/WINDOWS.md)
+- [Windows code-signing and distribution policy](docs/CODE_SIGNING.md)
 - [Credential-free Twitch CLI protocol test](docs/TWITCH_CLI_TESTING.md)
 - [Release gates and live acceptance checklist](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)

@@ -92,6 +92,18 @@ project will not describe an unsigned artifact as a frictionless release. Every
 release also includes `SHA256SUMS-windows.txt` for the installer, update files,
 and portable archive.
 
+The rationale, trust boundary, and open-source signing path are documented in
+the [Windows code-signing policy](CODE_SIGNING.md).
+
+## Uninstall
+
+Quit OpenStreamAlert from its tray menu, then remove it from **Settings → Apps →
+Installed apps**. Squirrel removes the installed program. To also delete local
+settings and encrypted Twitch credentials, remove
+`%APPDATA%\OpenStreamAlert` after uninstalling. OpenStreamAlert stores no chat
+history. You can separately revoke its access from Twitch's **Settings →
+Connections** page.
+
 ## Troubleshooting
 
 - **The app is gone but OBS chat still works:** it is running in the notification
