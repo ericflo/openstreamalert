@@ -36,6 +36,8 @@ interface TwitchEnvelope {
   payload: Record<string, any>;
 }
 
+class AuthorizationExpiredError extends Error {}
+
 export interface AccessTokenDependencies {
   getTokens: typeof getTokens;
   markTokenValidated: typeof markTokenValidated;
@@ -108,7 +110,9 @@ async function ensureValidAccessToken(
   if (!response.ok) {
     if (response.status === 400 || response.status === 401)
       dependencies.deleteSessionsForAccount(accountId);
-    throw new Error(`Twitch authorization expired (${response.status})`);
+    throw new AuthorizationExpiredError(
+      `Twitch authorization expired (${response.status})`,
+    );
   }
   const refreshed = (await response.json()) as {
     access_token: string;
@@ -182,10 +186,12 @@ export class TwitchChat {
   private validationTimer?: NodeJS.Timeout;
   private attempt = 0;
   private stopped = true;
-  private seen = new Set<string>();
+  private seen = new Map<string, number>();
   private badges = new Map<string, { imageUrl: string; title: string }>();
   private state: ConnectionState = { kind: "state", state: "connecting" };
   private lastEventAt?: string;
+  private minimumReconnectDelay = 0;
+  private terminalAuthorization = false;
   private readonly dependencies: TwitchChatDependencies;
 
   constructor(
@@ -199,13 +205,17 @@ export class TwitchChat {
     this.listeners.add(listener);
     listener(this.state);
     if (this.idleTimer) clearTimeout(this.idleTimer);
-    if (this.stopped) {
+    if (this.stopped && !this.terminalAuthorization) {
       this.stopped = false;
       void this.connect(EVENTSUB_URL, false);
       this.validationTimer = setInterval(() => {
         void this.dependencies
           .accessToken(this.accountId, true)
           .catch((error: unknown) => {
+            if (error instanceof AuthorizationExpiredError && this.socket) {
+              this.endAuthorization(this.socket, safeError(error));
+              return;
+            }
             this.setState("error", safeError(error));
             this.socket?.close();
           });
@@ -265,6 +275,10 @@ export class TwitchChat {
         abort.signal,
       ).catch((error: unknown) => {
         if (abort.signal.aborted) return;
+        if (error instanceof AuthorizationExpiredError) {
+          this.endAuthorization(socket, safeError(error));
+          return;
+        }
         this.setState("error", safeError(error));
         socket.close();
       });
@@ -276,9 +290,12 @@ export class TwitchChat {
       clearTimeout(watchdog);
       abort.abort();
       if (socket !== this.socket || this.stopped) return;
-      const delay =
+      const delay = Math.max(
+        this.minimumReconnectDelay,
         Math.min(30_000, 1_000 * 2 ** this.attempt++) +
-        Math.floor(this.dependencies.random() * 500);
+          Math.floor(this.dependencies.random() * 500),
+      );
+      this.minimumReconnectDelay = 0;
       this.setState("reconnecting", `Retrying in ${Math.ceil(delay / 1000)}s`);
       this.reconnectTimer = setTimeout(
         () => void this.connect(EVENTSUB_URL, false),
@@ -297,7 +314,6 @@ export class TwitchChat {
     const type = envelope.metadata.message_type;
     if (type === "session_welcome") {
       if (socket !== this.socket || this.stopped) return;
-      this.attempt = 0;
       previous?.close();
       if (!carrying) {
         const sessionId = envelope.payload.session?.id;
@@ -305,8 +321,10 @@ export class TwitchChat {
           throw new Error("Twitch welcome omitted a session ID");
         await this.createSubscriptions(sessionId, socket, signal);
       }
-      if (socket === this.socket && socket.readyState === WebSocket.OPEN)
+      if (socket === this.socket && socket.readyState === WebSocket.OPEN) {
+        this.attempt = 0;
         this.setState("connected");
+      }
       return;
     }
     if (type === "session_reconnect") {
@@ -319,8 +337,11 @@ export class TwitchChat {
       const status = envelope.payload.subscription?.status;
       if (status === "authorization_revoked" || status === "user_removed") {
         this.dependencies.authorizationLost(this.accountId);
-        this.stopped = true;
-        socket.close();
+        this.endAuthorization(
+          socket,
+          `Twitch authorization ended${status ? ` (${status})` : ""}. Reconnect in the studio.`,
+        );
+        return;
       }
       this.setState(
         "error",
@@ -330,9 +351,15 @@ export class TwitchChat {
     }
     if (type !== "notification" || this.seen.has(envelope.metadata.message_id))
       return;
-    this.seen.add(envelope.metadata.message_id);
-    if (this.seen.size > 1_000)
-      this.seen.delete(this.seen.values().next().value!);
+    const now = Date.now();
+    this.seen.set(envelope.metadata.message_id, now);
+    if (this.seen.size > 20_000) {
+      const cutoff = now - 10 * 60_000;
+      for (const [id, receivedAt] of this.seen) {
+        if (receivedAt >= cutoff && this.seen.size <= 10_000) break;
+        this.seen.delete(id);
+      }
+    }
     const event = normalizeEvent(envelope, this.badges);
     if (event) this.emit(event);
     // During Twitch-directed migration the old socket remains readable until
@@ -369,10 +396,24 @@ export class TwitchChat {
         },
       );
       if (!response.ok)
-        throw new Error(`Unable to subscribe to ${type} (${response.status})`);
+        if (response.status === 401 || response.status === 403) {
+          this.dependencies.authorizationLost(this.accountId);
+          throw new AuthorizationExpiredError(
+            `Twitch authorization expired (${response.status})`,
+          );
+        } else {
+          if (response.status === 429) {
+            const retryAfter = Number(response.headers.get("Retry-After"));
+            if (Number.isFinite(retryAfter) && retryAfter > 0)
+              this.minimumReconnectDelay = retryAfter * 1_000;
+          }
+          throw new Error(
+            `Unable to subscribe to ${type} (${response.status})`,
+          );
+        }
       if (socket !== this.socket || signal.aborted) return;
     }
-    await this.loadBadges(token, signal);
+    void this.loadBadges(token, signal).catch(() => undefined);
   }
 
   private async loadBadges(token: string, signal: AbortSignal) {
@@ -411,6 +452,15 @@ export class TwitchChat {
     this.socket?.close();
     this.socket = undefined;
     this.state = { kind: "state", state: "connecting" };
+  }
+
+  private endAuthorization(socket: WebSocket, detail: string) {
+    this.stopped = true;
+    this.terminalAuthorization = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.validationTimer) clearInterval(this.validationTimer);
+    socket.close();
+    this.setState("error", detail);
   }
 }
 

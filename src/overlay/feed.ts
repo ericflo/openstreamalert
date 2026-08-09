@@ -28,6 +28,7 @@ export function reduceOverlayEvent(
           sentAt: event.sentAt,
           action: true,
           firstMessage: false,
+          noticeType: event.noticeType ?? "notice",
         }
       : event.kind === "message"
         ? event
@@ -50,4 +51,14 @@ export function reduceOverlayEvent(
   )
     return current;
   return [...current, next].slice(-settings.maxMessages);
+}
+
+export function applySettingsToMessages(
+  current: ChatMessage[],
+  settings: OverlaySettings,
+) {
+  return current.reduce<ChatMessage[]>((visible, message) => {
+    if (message.noticeType && !settings.showNotices) return visible;
+    return reduceOverlayEvent(visible, message, settings);
+  }, []);
 }

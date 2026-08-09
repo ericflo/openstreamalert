@@ -38,8 +38,9 @@ CEF, traverses common reverse proxies, and keeps the overlay client small.
 ## URL routes, not generated HTML files
 
 The studio lives at `/`; OAuth returns to `/auth/callback`; an overlay lives at
-`/overlay/:key`. Settings remain server-side, so saved changes appear after an
-OBS refresh without producing a new URL.
+`/overlay/:key`. Settings remain server-side and stream into open overlays over
+SSE, so saved changes appear live without producing a new URL or requiring an
+OBS refresh.
 
 ## Progressive enhancement for development
 

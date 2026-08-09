@@ -161,7 +161,15 @@ function envelope(messageType: string, payload: Record<string, unknown> = {}) {
   };
 }
 
-function harness(accessToken = vi.fn().mockResolvedValue("token")) {
+function harness(
+  accessToken = vi.fn().mockResolvedValue("token"),
+  fetch = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ data: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  ),
+) {
   const sockets: MockSocket[] = [];
   const authorizationLost = vi.fn();
   const chat = new TwitchChat("42", {
@@ -171,12 +179,7 @@ function harness(accessToken = vi.fn().mockResolvedValue("token")) {
       return socket as unknown as WebSocket;
     },
     accessToken,
-    fetch: vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: [] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    ),
+    fetch,
     random: () => 0,
     authorizationLost,
   });
@@ -184,8 +187,7 @@ function harness(accessToken = vi.fn().mockResolvedValue("token")) {
 }
 
 async function settle() {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let index = 0; index < 12; index += 1) await Promise.resolve();
 }
 
 describe("Twitch EventSub lifecycle", () => {
@@ -280,6 +282,8 @@ describe("Twitch EventSub lifecycle", () => {
       state: "error",
       detail: expect.stringContaining("authorization_revoked"),
     });
+    chat.subscribe(() => undefined);
+    expect(sockets).toHaveLength(1);
     chat.stop();
   });
 
@@ -314,6 +318,73 @@ describe("Twitch EventSub lifecycle", () => {
     ).toHaveLength(1);
     expect(events.at(-1)).toEqual({ kind: "state", state: "connected" });
     chat.stop();
+  });
+
+  it("keeps core chat connected when optional badge metadata fails", async () => {
+    let calls = 0;
+    const fetch = vi.fn(() => {
+      calls += 1;
+      return calls <= 5
+        ? Promise.resolve(new Response(null, { status: 202 }))
+        : Promise.reject(new Error("badge CDN unavailable"));
+    });
+    const { chat, sockets } = harness(undefined, fetch);
+    const events: OverlayEvent[] = [];
+    chat.subscribe((event) => events.push(event));
+    sockets[0].message(envelope("session_welcome", { session: { id: "one" } }));
+    await settle();
+    await settle();
+
+    expect(events.at(-1)).toEqual({ kind: "state", state: "connected" });
+    chat.stop();
+  });
+
+  it("backs off repeated setup failures and stops on terminal authorization", async () => {
+    vi.useFakeTimers();
+    try {
+      const retrying = harness(
+        undefined,
+        vi.fn().mockResolvedValue(new Response(null, { status: 500 })),
+      );
+      const states: OverlayEvent[] = [];
+      retrying.chat.subscribe((event) => states.push(event));
+      retrying.sockets[0].message(
+        envelope("session_welcome", { session: { id: "one" } }),
+      );
+      await settle();
+      expect(states.at(-1)).toMatchObject({
+        kind: "state",
+        state: "reconnecting",
+        detail: "Retrying in 1s",
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      retrying.sockets[1].message(
+        envelope("session_welcome", { session: { id: "two" } }),
+      );
+      await settle();
+      expect(states.at(-1)).toMatchObject({
+        kind: "state",
+        state: "reconnecting",
+        detail: "Retrying in 2s",
+      });
+      retrying.chat.stop();
+
+      const terminal = harness(
+        undefined,
+        vi.fn().mockResolvedValue(new Response(null, { status: 401 })),
+      );
+      terminal.chat.subscribe(() => undefined);
+      terminal.sockets[0].message(
+        envelope("session_welcome", { session: { id: "terminal" } }),
+      );
+      await settle();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(terminal.authorizationLost).toHaveBeenCalledWith("42");
+      expect(terminal.sockets).toHaveLength(1);
+      terminal.chat.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

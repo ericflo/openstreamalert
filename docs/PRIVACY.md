@@ -9,6 +9,7 @@ third-party account system.
 - Twitch access and refresh tokens, encrypted with the operator's key
 - Opaque web sessions and their expiry time
 - The current overlay key and visual settings
+- Usernames and phrases that the broadcaster explicitly adds to overlay filters
 
 ## What is not stored
 
@@ -22,9 +23,11 @@ Browser sources keep only the currently visible bounded message list.
 
 The overlay URL is an access secret because it displays a channel's public chat.
 It contains no OAuth credential, can be paused without changing it, and can be
-rotated immediately; either action closes existing streams. Choosing **Delete
-account data** revokes the current Twitch token on a best-effort basis and
-deletes the account, sessions, settings, and encrypted tokens from SQLite.
+rotated immediately. Pause clears connected overlays and suppresses new chat
+while keeping their transport ready to resume; rotation terminates existing
+streams. Choosing **Delete account data** revokes the current Twitch token on a
+best-effort basis and deletes the account, sessions, settings, and encrypted
+tokens from SQLite.
 
 Self-hosters control their own server logs and reverse proxy. Configure those
 systems not to retain full overlay paths, protect database backups and

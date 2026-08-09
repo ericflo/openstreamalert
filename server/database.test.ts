@@ -46,4 +46,11 @@ describe("database migrations", () => {
     ).toEqual({ count: 1 });
     database.close();
   });
+
+  it("refuses to open a database created by a newer application", () => {
+    const database = new Database(":memory:");
+    database.pragma("user_version = 99");
+    expect(() => migrateDatabase(database)).toThrow(/newer.*supported/i);
+    database.close();
+  });
 });

@@ -8,6 +8,7 @@ interface Client {
 
 class OverlayStreams {
   private clients = new Map<string, Set<Client>>();
+  private paused = new Set<string>();
   private total = 0;
 
   attach(key: string, response: Response) {
@@ -24,19 +25,36 @@ class OverlayStreams {
     };
     return {
       detach,
-      send: (event: OverlayEvent) =>
-        this.write(client, `data: ${JSON.stringify(event)}\n\n`),
+      send: (event: OverlayEvent) => this.sendEvent(key, client, event),
       comment: (value: string) => this.write(client, `: ${value}\n\n`),
     };
   }
 
   publish(key: string, event: OverlayEvent) {
     for (const client of this.clients.get(key) ?? [])
-      this.write(client, `data: ${JSON.stringify(event)}\n\n`);
+      this.sendEvent(key, client, event);
+  }
+
+  configure(key: string, enabled: boolean) {
+    if (enabled) this.paused.delete(key);
+    else this.paused.add(key);
+  }
+
+  setEnabled(key: string, enabled: boolean, state?: OverlayEvent) {
+    if (enabled) this.paused.delete(key);
+    else this.paused.add(key);
+    const events: OverlayEvent[] = enabled
+      ? state
+        ? [state]
+        : [{ kind: "state", state: "connecting" }]
+      : [{ kind: "clear" }, { kind: "state", state: "paused" }];
+    for (const client of this.clients.get(key) ?? [])
+      for (const event of events) this.writeEvent(client, event);
   }
 
   revoke(key?: string) {
     if (!key) return;
+    this.paused.delete(key);
     const group = this.clients.get(key);
     if (!group) return;
     for (const client of [...group]) {
@@ -66,6 +84,21 @@ class OverlayStreams {
     } else if (++client.slowWrites >= 3) {
       client.response.end();
     }
+  }
+
+  private sendEvent(key: string, client: Client, event: OverlayEvent) {
+    if (
+      this.paused.has(key) &&
+      event.kind !== "clear" &&
+      event.kind !== "settings" &&
+      !(event.kind === "state" && event.state === "paused")
+    )
+      return;
+    this.writeEvent(client, event);
+  }
+
+  private writeEvent(client: Client, event: OverlayEvent) {
+    this.write(client, `data: ${JSON.stringify(event)}\n\n`);
   }
 }
 

@@ -10,10 +10,11 @@ import { Brand } from "../components/Brand";
 import { ChatCanvas } from "../overlay/ChatCanvas";
 import { encodeSettings } from "../overlay/config-url";
 import { demoMessages, makeDemoMessage } from "../overlay/demo";
-import { reduceOverlayEvent } from "../overlay/feed";
+import { applySettingsToMessages, reduceOverlayEvent } from "../overlay/feed";
 
 type FeedStatus = {
-  state: "idle" | "connecting" | "connected" | "reconnecting" | "error";
+  state:
+    "idle" | "connecting" | "connected" | "reconnecting" | "paused" | "error";
   detail?: string;
   viewers?: number;
   lastEventAt?: string | null;
@@ -66,6 +67,7 @@ const authErrors: Record<string, string> = {
     "The Twitch sign-in expired or failed its security check. Try again.",
   "oauth-failed":
     "Twitch sign-in could not be completed. Check the server logs and retry.",
+  "oauth-denied": "Twitch connection was cancelled. Nothing was changed.",
   "not-allowed":
     "This Twitch account is not allowed to use this private instance.",
 };
@@ -106,6 +108,8 @@ function listFromInput(value: string) {
 export function Studio() {
   const [status, setStatus] = useState<Status | null>(null);
   const [settings, setSettings] = useState(defaultSettings);
+  const [blockedUsersDraft, setBlockedUsersDraft] = useState("");
+  const [blockedWordsDraft, setBlockedWordsDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(demoMessages);
   const [feedStatus, setFeedStatus] = useState<FeedStatus>({ state: "idle" });
   const [saved, setSaved] = useState<"idle" | "saving" | "saved" | "error">(
@@ -167,7 +171,10 @@ export function Studio() {
       setStatus(data);
       setFeedStatus(data.connection ?? { state: "idle" });
       if (data.overlay) {
-        setSettings(parseSettings(data.overlay.settings));
+        const next = parseSettings(data.overlay.settings);
+        setSettings(next);
+        setBlockedUsersDraft(next.blockedUsers.join(", "));
+        setBlockedWordsDraft(next.blockedWords.join(", "));
         if (data.account) setMessages([]);
       }
     } catch (error) {
@@ -179,6 +186,7 @@ export function Studio() {
 
   function applySettings(next: OverlaySettings, persist = true) {
     setSettings(next);
+    setMessages((current) => applySettingsToMessages(current, next));
     settingsRef.current = next;
     if (!persist || !status?.account) return;
     pendingSave.current = next;
@@ -274,13 +282,21 @@ export function Studio() {
     if (!file) return;
     try {
       const candidate = JSON.parse(await file.text());
-      const values =
-        candidate &&
-        typeof candidate === "object" &&
-        "settings" in candidate &&
-        (candidate as { version?: unknown }).version === 1
-          ? (candidate as { settings: unknown }).settings
-          : candidate;
+      if (
+        !candidate ||
+        typeof candidate !== "object" ||
+        Array.isArray(candidate)
+      )
+        throw new Error("That file must contain a settings object.");
+      const envelope = candidate as Record<string, unknown>;
+      if ("version" in envelope && envelope.version !== 1)
+        throw new Error("That configuration version is not supported.");
+      const values = "settings" in envelope ? envelope.settings : envelope;
+      if (!values || typeof values !== "object" || Array.isArray(values))
+        throw new Error("That file must contain a settings object.");
+      const knownKeys = Object.keys(defaultSettings);
+      if (!Object.keys(values).some((key) => knownKeys.includes(key)))
+        throw new Error("That file does not contain OpenStreamAlert settings.");
       const parsed = overlaySettingsSchema.safeParse({
         ...defaultSettings,
         ...(values && typeof values === "object" ? values : {}),
@@ -290,6 +306,8 @@ export function Studio() {
           "That file is not a valid OpenStreamAlert configuration.",
         );
       applySettings(parsed.data);
+      setBlockedUsersDraft(parsed.data.blockedUsers.join(", "));
+      setBlockedWordsDraft(parsed.data.blockedWords.join(", "));
     } catch (error) {
       setUiError(
         error instanceof Error ? error.message : "Configuration import failed.",
@@ -702,11 +720,12 @@ export function Studio() {
                 </span>
                 <input
                   className="text-input"
-                  value={settings.blockedUsers.join(", ")}
+                  value={blockedUsersDraft}
                   placeholder="nightbot, spam_account"
-                  onChange={(event) =>
-                    update("blockedUsers", listFromInput(event.target.value))
-                  }
+                  onChange={(event) => {
+                    setBlockedUsersDraft(event.target.value);
+                    update("blockedUsers", listFromInput(event.target.value));
+                  }}
                 />
               </label>
               <label className="field">
@@ -715,11 +734,12 @@ export function Studio() {
                 </span>
                 <input
                   className="text-input"
-                  value={settings.blockedWords.join(", ")}
+                  value={blockedWordsDraft}
                   placeholder="spoiler, unwanted phrase"
-                  onChange={(event) =>
-                    update("blockedWords", listFromInput(event.target.value))
-                  }
+                  onChange={(event) => {
+                    setBlockedWordsDraft(event.target.value);
+                    update("blockedWords", listFromInput(event.target.value));
+                  }}
                 />
               </label>
               <div className="portable-actions">
@@ -727,7 +747,13 @@ export function Studio() {
                 <button onClick={() => importRef.current?.click()}>
                   Import JSON
                 </button>
-                <button onClick={() => applySettings(defaultSettings)}>
+                <button
+                  onClick={() => {
+                    setBlockedUsersDraft("");
+                    setBlockedWordsDraft("");
+                    applySettings(defaultSettings);
+                  }}
+                >
                   Reset
                 </button>
                 <input
@@ -771,13 +797,19 @@ export function Studio() {
                 <div className="url-field">
                   <code title={overlayUrl()}>{overlayUrl()}</code>
                   <button onClick={copyUrl} aria-live="polite">
-                    {copied ? "Copied!" : "Copy URL"}
+                    {copied
+                      ? "Copied!"
+                      : status?.account
+                        ? "Copy URL"
+                        : "Copy demo URL"}
                   </button>
                 </div>
                 <p className="obs-note">
-                  Saved changes now update open Browser Sources live. Keep
-                  “Shutdown source when not visible” and “Refresh browser when
-                  active” off. Treat this URL as a secret.
+                  {status?.account
+                    ? "Saved changes update open Browser Sources live. "
+                    : "Demo URLs are visual-test snapshots; copy again after changing them. "}
+                  Keep “Shutdown source when not visible” and “Refresh browser
+                  when active” off. Treat this URL as a secret.
                 </p>
                 {status?.account && (
                   <div className="account-actions">

@@ -47,6 +47,10 @@ const INITIAL_SCHEMA = `
 export function migrateDatabase(target: Database.Database) {
   const migrate = target.transaction(() => {
     const version = target.pragma("user_version", { simple: true }) as number;
+    if (version > 2)
+      throw new Error(
+        `Database schema ${version} is newer than the supported schema 2`,
+      );
     if (version < 1) {
       target.exec(INITIAL_SCHEMA);
       const accountColumns = target.pragma("table_info(accounts)") as Array<{
@@ -134,14 +138,20 @@ export function getAccountBySession(token?: string): Account | undefined {
     )
     .get(hashToken(token), Date.now()) as
     { id: string; login: string; display_name: string } | undefined;
+  if (
+    row &&
+    config.allowedTwitchUsers.length &&
+    !config.allowedTwitchUsers.includes(row.login.toLowerCase())
+  )
+    return undefined;
   return row && { id: row.id, login: row.login, displayName: row.display_name };
 }
 
 export function accountCanConnect(id: string, login: string) {
-  const existing = db.prepare("SELECT 1 FROM accounts WHERE id=?").get(id);
-  if (existing) return true;
   if (config.allowedTwitchUsers.length)
     return config.allowedTwitchUsers.includes(login.toLowerCase());
+  const existing = db.prepare("SELECT 1 FROM accounts WHERE id=?").get(id);
+  if (existing) return true;
   const row = db.prepare("SELECT COUNT(*) AS count FROM accounts").get() as {
     count: number;
   };
@@ -224,16 +234,23 @@ export function getOverlayForAccount(accountId: string) {
 export function getOverlayByKey(key: string) {
   const row = db
     .prepare(
-      `SELECT o.account_id, o.settings, a.display_name FROM overlays o
-    JOIN accounts a ON a.id=o.account_id WHERE o.overlay_key=? AND o.enabled=1`,
+      `SELECT o.account_id, o.settings, o.enabled, a.display_name FROM overlays o
+    JOIN accounts a ON a.id=o.account_id WHERE o.overlay_key=?`,
     )
     .get(key) as
-    { account_id: string; settings: string; display_name: string } | undefined;
+    | {
+        account_id: string;
+        settings: string;
+        display_name: string;
+        enabled: number;
+      }
+    | undefined;
   return (
     row && {
       accountId: row.account_id,
       channelName: row.display_name,
       settings: decodeSettings(row.settings),
+      enabled: Boolean(row.enabled),
     }
   );
 }

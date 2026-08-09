@@ -114,6 +114,10 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
 
   app.get("/auth/callback", async (request, response) => {
     try {
+      if (request.query.error === "access_denied") {
+        clearCookie(response, "osa_oauth_state");
+        return response.redirect("/?error=oauth-denied");
+      }
       const code = String(request.query.code ?? "");
       const state = String(request.query.state ?? "");
       if (!code || !state || state !== cookies(request).osa_oauth_state)
@@ -177,6 +181,8 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
         refreshToken: token.refresh_token,
         expiresAt: Date.now() + token.expires_in * 1000,
       });
+      // Replace any cached terminal authorization state from a prior grant.
+      chats.stop(user.user_id);
       const sessionToken = createSession(
         user.user_id,
         Date.now() + config.sessionDays * 86_400_000,
@@ -245,8 +251,20 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
         request.account!.id,
         request.body.enabled,
       );
-      if (!request.body.enabled) {
-        overlayStreams.revoke(current?.key);
+      if (current) {
+        const connection = chats.snapshot(request.account!.id);
+        overlayStreams.setEnabled(
+          current.key,
+          request.body.enabled,
+          request.body.enabled
+            ? {
+                kind: "state",
+                state:
+                  connection.state === "idle" ? "connecting" : connection.state,
+                detail: connection.detail,
+              }
+            : undefined,
+        );
       }
       response.json({ enabled: overlay?.enabled ?? false });
     },
@@ -279,17 +297,21 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
   );
 
   app.get("/api/studio/events", requireAccount, (request, response) => {
+    const stream = overlayStreams.attach(
+      `studio:${request.account!.id}`,
+      response,
+    );
+    if (!stream)
+      return response.status(429).json({ error: "Too many studio viewers" });
     prepareSse(response);
     const unsubscribe = chats
       .for(request.account!.id)
-      .subscribe((event) => writeSse(response, event));
-    const heartbeat = setInterval(
-      () => response.write(": heartbeat\n\n"),
-      15_000,
-    );
+      .subscribe((event) => stream.send(event));
+    const heartbeat = setInterval(() => stream.comment("heartbeat"), 15_000);
     request.on("close", () => {
       clearInterval(heartbeat);
       unsubscribe();
+      stream.detach();
     });
   });
 
@@ -300,18 +322,24 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
     response.json({
       channelName: overlay.channelName,
       settings: overlay.settings,
+      enabled: overlay.enabled,
     });
   });
 
   app.get("/api/overlay/:key/events", (request, response) => {
     const overlay = getOverlayByKey(request.params.key);
     if (!overlay) return response.status(404).end();
+    overlayStreams.configure(request.params.key, overlay.enabled);
     const stream = overlayStreams.attach(request.params.key, response);
     if (!stream)
       return response.status(429).json({ error: "Too many overlay viewers" });
     prepareSse(response);
     stream.comment("connected");
     stream.send({ kind: "settings", settings: overlay.settings });
+    if (!overlay.enabled) {
+      stream.send({ kind: "clear" });
+      stream.send({ kind: "state", state: "paused" });
+    }
     const unsubscribe = chats
       .for(overlay.accountId)
       .subscribe((event) => stream.send(event));
@@ -389,11 +417,6 @@ function prepareSse(response: Response) {
     "X-Accel-Buffering": "no",
   });
   response.flushHeaders();
-}
-
-function writeSse(response: Response, event: unknown) {
-  if (!response.writableEnded)
-    response.write(`data: ${JSON.stringify(event)}\n\n`);
 }
 
 async function revokeToken(token: string) {

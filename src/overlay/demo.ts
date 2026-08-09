@@ -10,7 +10,7 @@ export const demoMessages: ChatMessage[] = [
     badges: [{ setId: "subscriber", id: "12" }],
     text: "That lighting looks so good tonight",
     fragments: [{ type: "text", text: "That lighting looks so good tonight" }],
-    sentAt: new Date(Date.now() - 65_000).toISOString(),
+    sentAt: new Date(Date.now() - 15_000).toISOString(),
     action: false,
     firstMessage: false,
   },
@@ -26,7 +26,7 @@ export const demoMessages: ChatMessage[] = [
       { type: "text", text: "We are so back " },
       { type: "emote", text: "Kappa", id: "25" },
     ],
-    sentAt: new Date(Date.now() - 31_000).toISOString(),
+    sentAt: new Date(Date.now() - 8_000).toISOString(),
     reply: {
       userName: "mossybytes",
       text: "That lighting looks so good tonight",

@@ -40,4 +40,12 @@ describe("HTTP application", () => {
       .expect(413);
     expect(response.headers["cache-control"]).toBe("no-store");
   });
+
+  it("reports a cancelled Twitch grant without treating it as a state failure", async () => {
+    const app = await createApp({ serveClient: false });
+    await request(app)
+      .get("/auth/callback?error=access_denied")
+      .expect(302)
+      .expect("Location", "/?error=oauth-denied");
+  });
 });

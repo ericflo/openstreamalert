@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage, OverlayEvent } from "../../shared/events";
 import { defaultSettings } from "../../shared/settings";
-import { reduceOverlayEvent } from "./feed";
+import { applySettingsToMessages, reduceOverlayEvent } from "./feed";
 
 function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -87,5 +87,22 @@ describe("overlay feed", () => {
         maxMessages: 3,
       }).map((item) => item.id),
     ).toEqual(["two", "three", "four"]);
+  });
+
+  it("applies changed privacy filters and limits to messages already visible", () => {
+    const current = [
+      message({ id: "oldest", userName: "Ada" }),
+      message({ id: "blocked", userName: "NightBot" }),
+      message({ id: "notice", noticeType: "sub" }),
+      message({ id: "latest", text: "still visible" }),
+    ];
+    expect(
+      applySettingsToMessages(current, {
+        ...defaultSettings,
+        blockedUsers: ["nightbot"],
+        showNotices: false,
+        maxMessages: 3,
+      }).map((item) => item.id),
+    ).toEqual(["oldest", "latest"]);
   });
 });

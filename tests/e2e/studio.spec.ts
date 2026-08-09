@@ -12,6 +12,10 @@ test("demo studio presents the complete OBS setup flow", async ({ page }) => {
     page.getByRole("heading", { name: /Your chat belongs/ }),
   ).toBeVisible();
   await expect(page.getByText("Add to OBS")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Copy demo URL" }),
+  ).toBeVisible();
+  await expect(page.getByText(/visual-test snapshots/)).toBeVisible();
   await page.getByRole("button", { name: "Terminal" }).click();
   await expect(page.locator(".chat-canvas")).toHaveClass(/preset-terminal/);
   await expect(page.locator(".chat-canvas")).toHaveClass(/font-mono/);
@@ -135,6 +139,39 @@ test("user and phrase filters reject matching incoming preview messages", async 
   await expect(messages).toHaveCount(4);
 });
 
+test("filter drafts preserve ordinary comma-separated typing", async ({
+  page,
+}) => {
+  await openDemoStudio(page);
+  const users = page.getByLabel(/Hidden users/);
+  await users.pressSequentially("nightbot, spam_account");
+  await expect(users).toHaveValue("nightbot, spam_account");
+  const url = await page.locator(".url-field code").getAttribute("title");
+  const encoded = new URL(url!).searchParams.get("config");
+  const settings = JSON.parse(
+    Buffer.from(encoded!, "base64url").toString("utf8"),
+  ) as { blockedUsers: string[] };
+  expect(settings.blockedUsers).toEqual(["nightbot", "spam_account"]);
+});
+
+test("invalid and future configuration files are rejected without reset", async ({
+  page,
+}) => {
+  await openDemoStudio(page);
+  await page.getByRole("button", { name: "Terminal" }).click();
+  const input = page.locator('input[type="file"]');
+  await input.setInputFiles({
+    name: "future.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ version: 2, settings: {} })),
+  });
+  await expect(page.getByRole("alert")).toContainText("not supported");
+  await expect(page.getByRole("button", { name: "Terminal" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
 test("studio controls expose selection and keyboard focus state", async ({
   page,
 }) => {
@@ -146,8 +183,10 @@ test("studio controls expose selection and keyboard focus state", async ({
   await expect(glass).toHaveAttribute("aria-pressed", "false");
   await expect(terminal).toHaveAttribute("aria-pressed", "true");
 
+  const badges = page.getByRole("checkbox", { name: "Badges" });
   const timestamps = page.getByRole("checkbox", { name: "Timestamps" });
-  await timestamps.focus();
+  await badges.focus();
+  await page.keyboard.press("Tab");
   await expect(timestamps).toBeFocused();
   const focusOutline = await timestamps
     .locator("xpath=following-sibling::i")

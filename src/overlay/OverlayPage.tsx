@@ -8,10 +8,10 @@ import {
 import { ChatCanvas } from "./ChatCanvas";
 import { decodeSettings } from "./config-url";
 import { demoMessages } from "./demo";
-import { reduceOverlayEvent } from "./feed";
+import { applySettingsToMessages, reduceOverlayEvent } from "./feed";
 
 type FeedStatus = {
-  state: "connecting" | "connected" | "reconnecting" | "error";
+  state: "connecting" | "connected" | "reconnecting" | "paused" | "error";
   detail?: string;
 };
 
@@ -26,11 +26,13 @@ export function OverlayPage() {
   )
     ? (requestedPreset as OverlaySettings["preset"])
     : defaultSettings.preset;
-  const [settings, setSettings] = useState<OverlaySettings>(
-    encodedSettings ?? { ...defaultSettings, preset: demoPreset },
-  );
+  const initialSettings = encodedSettings ?? {
+    ...defaultSettings,
+    preset: demoPreset,
+  };
+  const [settings, setSettings] = useState<OverlaySettings>(initialSettings);
   const [messages, setMessages] = useState<ChatMessage[]>(
-    demo ? demoMessages : [],
+    demo ? applySettingsToMessages(demoMessages, initialSettings) : [],
   );
   const [status, setStatus] = useState<FeedStatus>(
     demo
@@ -44,6 +46,7 @@ export function OverlayPage() {
 
   const applyEvent = useCallback((event: OverlayEvent) => {
     if (event.kind === "state") {
+      if (event.state === "paused") setMessages([]);
       setStatus({ state: event.state, detail: event.detail });
       return;
     }
@@ -51,6 +54,7 @@ export function OverlayPage() {
       const next = parseSettings(event.settings);
       settingsRef.current = next;
       setSettings(next);
+      setMessages((current) => applySettingsToMessages(current, next));
       return;
     }
     setMessages((current) =>
@@ -75,7 +79,10 @@ export function OverlayPage() {
               ? "This overlay URL is invalid or has been rotated."
               : "The overlay could not be loaded.",
           );
-        const data = (await response.json()) as { settings: OverlaySettings };
+        const data = (await response.json()) as {
+          settings: OverlaySettings;
+          enabled: boolean;
+        };
         if (abort.signal.aborted) return;
         setSettings(parseSettings(data.settings));
         source = new EventSource(
@@ -109,7 +116,7 @@ export function OverlayPage() {
   }, [applyEvent, demo, key]);
 
   useEffect(() => {
-    if (!settings.messageLifetime || demo) return;
+    if (!settings.messageLifetime) return;
     const timer = setInterval(() => {
       const cutoff = Date.now() - settings.messageLifetime * 1_000;
       setMessages((current) =>
@@ -117,7 +124,7 @@ export function OverlayPage() {
       );
     }, 500);
     return () => clearInterval(timer);
-  }, [settings.messageLifetime, demo]);
+  }, [settings.messageLifetime]);
 
   return <ChatCanvas settings={settings} messages={messages} status={status} />;
 }

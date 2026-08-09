@@ -48,4 +48,35 @@ describe("overlay stream registry", () => {
     one.detach();
     two.detach();
   });
+
+  it("keeps paused streams open, clears them, and resumes in place", () => {
+    const target = fakeResponse();
+    const stream = overlayStreams.attach("pausable", target.response)!;
+    overlayStreams.setEnabled("pausable", false);
+    stream.send({ kind: "clear" });
+    stream.send({
+      kind: "message",
+      id: "hidden",
+      userId: "1",
+      userName: "Ada",
+      userColor: "#ffffff",
+      badges: [],
+      fragments: [{ type: "text", text: "secret" }],
+      text: "secret",
+      sentAt: new Date().toISOString(),
+      action: false,
+      firstMessage: false,
+    });
+    expect(target.response.writableEnded).toBe(false);
+    expect(target.writes.join("")).not.toContain("secret");
+    expect(target.writes.join("")).toContain('"paused"');
+
+    overlayStreams.setEnabled("pausable", true, {
+      kind: "state",
+      state: "connected",
+    });
+    stream.send({ kind: "clear" });
+    expect(target.writes.join("")).toContain('"connected"');
+    stream.detach();
+  });
 });

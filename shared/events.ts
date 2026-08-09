@@ -21,6 +21,7 @@ export interface ChatMessage {
   reply?: { userName: string; text: string };
   action: boolean;
   firstMessage: boolean;
+  noticeType?: string;
 }
 
 export type OverlayEvent =
@@ -43,6 +44,6 @@ export type OverlayEvent =
   | { kind: "settings"; settings: import("./settings.js").OverlaySettings }
   | {
       kind: "state";
-      state: "connecting" | "connected" | "reconnecting" | "error";
+      state: "connecting" | "connected" | "reconnecting" | "paused" | "error";
       detail?: string;
     };

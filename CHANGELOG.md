@@ -15,5 +15,5 @@ tagged.
 - Live settings, privacy pause/resume, user/phrase filters, and portable config
 - Versioned database migrations, production account allowlisting, and readiness diagnostics
 - Encrypted SQLite credential storage with hourly token validation
-- Hardened Docker deployment, coverage-gated CI, CodeQL, browser acceptance tests,
-  and operator/release documentation
+- Hardened Docker deployment, coverage-gated CI, a release image scanner,
+  public-launch CodeQL, browser acceptance tests, and operator documentation

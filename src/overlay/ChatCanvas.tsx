@@ -106,10 +106,11 @@ export function ChatCanvas({
   settings: OverlaySettings;
   messages: ChatMessage[];
   status?: {
-    state: "connecting" | "connected" | "reconnecting" | "error";
+    state: "connecting" | "connected" | "reconnecting" | "paused" | "error";
     detail?: string;
   };
 }) {
+  if (status.state === "paused") return null;
   const style = {
     "--font-size": `${settings.fontSize}px`,
     "--panel-alpha": settings.backgroundOpacity,

@@ -29,9 +29,18 @@ export const config = {
 if (!Number.isInteger(port) || port < 1 || port > 65_535)
   throw new Error("PORT must be an integer between 1 and 65535");
 try {
-  new URL(appUrl);
+  const parsedAppUrl = new URL(appUrl);
+  if (parsedAppUrl.protocol !== "http:" && parsedAppUrl.protocol !== "https:")
+    throw new Error("unsupported protocol");
+  const loopback = ["localhost", "127.0.0.1", "::1"].includes(
+    parsedAppUrl.hostname,
+  );
+  if (config.production && parsedAppUrl.protocol !== "https:" && !loopback)
+    throw new Error("production requires HTTPS");
 } catch {
-  throw new Error("APP_URL must be an absolute http:// or https:// URL");
+  throw new Error(
+    "APP_URL must be an absolute HTTP(S) URL; production non-loopback URLs require HTTPS",
+  );
 }
 const twitchParts = [
   config.twitchClientId,
