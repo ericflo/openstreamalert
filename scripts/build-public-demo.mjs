@@ -1,8 +1,10 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const build = spawnSync(npm, ["run", "build"], {
+const npmCli = process.env.npm_execpath;
+if (!npmCli) throw new Error("Run the public demo build through npm.");
+
+const build = spawnSync(process.execPath, [npmCli, "run", "build"], {
   stdio: "inherit",
   env: {
     ...process.env,
