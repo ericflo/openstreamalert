@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 

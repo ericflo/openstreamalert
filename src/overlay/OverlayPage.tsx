@@ -6,9 +6,18 @@ import { demoMessages } from "./demo";
 
 export function OverlayPage() {
   const key = window.location.pathname.split("/").filter(Boolean)[1] ?? "";
-  const demo =
-    key === "demo" || new URLSearchParams(window.location.search).has("demo");
-  const [settings, setSettings] = useState<OverlaySettings>(defaultSettings);
+  const query = new URLSearchParams(window.location.search);
+  const demo = key === "demo" || query.has("demo");
+  const requestedPreset = query.get("preset");
+  const demoPreset = ["minimal", "glass", "bubble", "terminal"].includes(
+    requestedPreset ?? "",
+  )
+    ? (requestedPreset as OverlaySettings["preset"])
+    : defaultSettings.preset;
+  const [settings, setSettings] = useState<OverlaySettings>({
+    ...defaultSettings,
+    preset: demoPreset,
+  });
   const [messages, setMessages] = useState<ChatMessage[]>(
     demo ? demoMessages : [],
   );

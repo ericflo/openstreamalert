@@ -15,6 +15,7 @@ import {
   deleteSession,
   getOverlayByKey,
   getOverlayForAccount,
+  getTokens,
   rotateOverlayKey,
   saveAccount,
   saveSettings,
@@ -32,6 +33,12 @@ app.use((_request, response, next) => {
     "X-Frame-Options": "SAMEORIGIN",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   });
+  if (config.production) {
+    response.set(
+      "Content-Security-Policy",
+      "default-src 'self'; connect-src 'self'; img-src 'self' https://static-cdn.jtvnw.net data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self' https://id.twitch.tv; frame-ancestors 'self'",
+    );
+  }
   next();
 });
 app.use(express.json({ limit: "32kb" }));
@@ -52,6 +59,8 @@ app.get("/api/status", (request, response) => {
       : null,
   });
 });
+
+app.get("/api/health", (_request, response) => response.json({ ok: true }));
 
 app.get("/api/auth/twitch", (_request, response) => {
   if (!twitchIsConfigured()) return response.redirect("/?error=not-configured");
@@ -150,12 +159,10 @@ app.put(
   (request, response) => {
     const parsed = overlaySettingsSchema.safeParse(request.body);
     if (!parsed.success)
-      return response
-        .status(400)
-        .json({
-          error: "Invalid overlay settings",
-          issues: parsed.error.issues,
-        });
+      return response.status(400).json({
+        error: "Invalid overlay settings",
+        issues: parsed.error.issues,
+      });
     saveSettings(request.account!.id, parsed.data);
     response.json({ settings: parsed.data });
   },
@@ -181,7 +188,18 @@ app.delete(
   "/api/account",
   requireAccount,
   requireSameOrigin,
-  (request, response) => {
+  async (request, response) => {
+    const tokens = getTokens(request.account!.id);
+    if (tokens) {
+      await fetch("https://id.twitch.tv/oauth2/revoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: config.twitchClientId,
+          token: tokens.accessToken,
+        }),
+      }).catch(() => undefined);
+    }
     chats.stop(request.account!.id);
     deleteAccount(request.account!.id);
     clearCookie(response, "osa_session");

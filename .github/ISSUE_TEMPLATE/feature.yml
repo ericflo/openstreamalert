@@ -1,0 +1,23 @@
+name: Feature idea
+description: Propose a focused improvement grounded in a streamer need.
+title: "idea: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Streamer problem
+      description: What is difficult today, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Ideal outcome
+      description: Describe success without prescribing an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds considered

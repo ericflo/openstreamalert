@@ -17,6 +17,7 @@ db.exec(`
     access_token TEXT NOT NULL,
     refresh_token TEXT NOT NULL,
     expires_at INTEGER NOT NULL,
+    validated_at INTEGER NOT NULL DEFAULT 0,
     updated_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS sessions (
@@ -31,6 +32,14 @@ db.exec(`
     updated_at INTEGER NOT NULL
   );
 `);
+const accountColumns = db.pragma("table_info(accounts)") as Array<{
+  name: string;
+}>;
+if (!accountColumns.some((column) => column.name === "validated_at")) {
+  db.exec(
+    "ALTER TABLE accounts ADD COLUMN validated_at INTEGER NOT NULL DEFAULT 0",
+  );
+}
 
 export interface Account {
   id: string;
@@ -46,11 +55,11 @@ export function saveAccount(
   },
 ) {
   db.prepare(
-    `INSERT INTO accounts (id, login, display_name, access_token, refresh_token, expires_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO accounts (id, login, display_name, access_token, refresh_token, expires_at, validated_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET login=excluded.login, display_name=excluded.display_name,
       access_token=excluded.access_token, refresh_token=excluded.refresh_token,
-      expires_at=excluded.expires_at, updated_at=excluded.updated_at`,
+      expires_at=excluded.expires_at, validated_at=excluded.validated_at, updated_at=excluded.updated_at`,
   ).run(
     input.id,
     input.login,
@@ -59,6 +68,7 @@ export function saveAccount(
     encrypt(input.refreshToken),
     input.expiresAt,
     Date.now(),
+    Date.now(),
   );
   db.prepare(
     `INSERT OR IGNORE INTO overlays (account_id, overlay_key, settings, updated_at) VALUES (?, ?, ?, ?)`,
@@ -66,6 +76,7 @@ export function saveAccount(
 }
 
 export function createSession(accountId: string, expiresAt: number) {
+  db.prepare("DELETE FROM sessions WHERE expires_at<=?").run(Date.now());
   const token = randomToken();
   db.prepare(
     "INSERT INTO sessions (token_hash, account_id, expires_at) VALUES (?, ?, ?)",
@@ -93,16 +104,22 @@ export function deleteSession(token?: string) {
 export function getTokens(accountId: string) {
   const row = db
     .prepare(
-      "SELECT access_token, refresh_token, expires_at FROM accounts WHERE id=?",
+      "SELECT access_token, refresh_token, expires_at, validated_at FROM accounts WHERE id=?",
     )
     .get(accountId) as
-    | { access_token: string; refresh_token: string; expires_at: number }
+    | {
+        access_token: string;
+        refresh_token: string;
+        expires_at: number;
+        validated_at: number;
+      }
     | undefined;
   if (!row) return undefined;
   return {
     accessToken: decrypt(row.access_token),
     refreshToken: decrypt(row.refresh_token),
     expiresAt: row.expires_at,
+    validatedAt: row.validated_at,
   };
 }
 
@@ -113,11 +130,20 @@ export function updateTokens(
   expiresAt: number,
 ) {
   db.prepare(
-    "UPDATE accounts SET access_token=?, refresh_token=?, expires_at=?, updated_at=? WHERE id=?",
+    "UPDATE accounts SET access_token=?, refresh_token=?, expires_at=?, validated_at=?, updated_at=? WHERE id=?",
   ).run(
     encrypt(accessToken),
     encrypt(refreshToken),
     expiresAt,
+    Date.now(),
+    Date.now(),
+    accountId,
+  );
+}
+
+export function markTokenValidated(accountId: string) {
+  db.prepare("UPDATE accounts SET validated_at=?, updated_at=? WHERE id=?").run(
+    Date.now(),
     Date.now(),
     accountId,
   );

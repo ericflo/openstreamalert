@@ -5,7 +5,7 @@ import type {
   ChatMessage,
 } from "../shared/events.js";
 import { config } from "./config.js";
-import { getTokens, updateTokens } from "./database.js";
+import { getTokens, markTokenValidated, updateTokens } from "./database.js";
 
 const EVENTSUB_URL =
   "wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30";
@@ -32,7 +32,17 @@ interface TwitchEnvelope {
 async function validAccessToken(accountId: string): Promise<string> {
   const tokens = getTokens(accountId);
   if (!tokens) throw new Error("Twitch account no longer exists");
-  if (tokens.expiresAt > Date.now() + 60_000) return tokens.accessToken;
+  if (tokens.expiresAt > Date.now() + 60_000) {
+    if (tokens.validatedAt >= Date.now() - 60 * 60_000)
+      return tokens.accessToken;
+    const validation = await fetch("https://id.twitch.tv/oauth2/validate", {
+      headers: { Authorization: `OAuth ${tokens.accessToken}` },
+    });
+    if (validation.ok) {
+      markTokenValidated(accountId);
+      return tokens.accessToken;
+    }
+  }
 
   const body = new URLSearchParams({
     grant_type: "refresh_token",
@@ -65,6 +75,7 @@ export class TwitchChat {
   private socket?: WebSocket;
   private reconnectTimer?: NodeJS.Timeout;
   private idleTimer?: NodeJS.Timeout;
+  private validationTimer?: NodeJS.Timeout;
   private attempt = 0;
   private stopped = true;
   private seen = new Set<string>();
@@ -78,6 +89,16 @@ export class TwitchChat {
     if (this.stopped) {
       this.stopped = false;
       void this.connect(EVENTSUB_URL, false);
+      this.validationTimer = setInterval(() => {
+        void validAccessToken(this.accountId).catch(() => {
+          this.emit({
+            kind: "state",
+            state: "error",
+            detail: "Twitch authorization expired. Reconnect in the studio.",
+          });
+          this.socket?.close();
+        });
+      }, 60 * 60_000);
     }
     return () => {
       this.listeners.delete(listener);
@@ -99,31 +120,31 @@ export class TwitchChat {
     const socket = new WebSocket(url);
     const previous = this.socket;
     this.socket = socket;
+    let watchdog = setTimeout(() => socket.terminate(), 15_000);
 
-    socket.on(
-      "message",
-      (raw) =>
-        void this.handle(
-          JSON.parse(raw.toString()) as TwitchEnvelope,
-          socket,
-          previous,
-          carryingSubscriptions,
-        ).catch((error: unknown) => {
-          this.emit({
-            kind: "state",
-            state: "error",
-            detail:
-              error instanceof Error
-                ? error.message
-                : "Twitch connection failed",
-          });
-          socket.close();
-        }),
-    );
+    socket.on("message", (raw) => {
+      clearTimeout(watchdog);
+      watchdog = setTimeout(() => socket.terminate(), 45_000);
+      void this.handle(
+        JSON.parse(raw.toString()) as TwitchEnvelope,
+        socket,
+        previous,
+        carryingSubscriptions,
+      ).catch((error: unknown) => {
+        this.emit({
+          kind: "state",
+          state: "error",
+          detail:
+            error instanceof Error ? error.message : "Twitch connection failed",
+        });
+        socket.close();
+      });
+    });
     socket.on("error", () => {
       /* close handles recovery; never expose credentials */
     });
     socket.on("close", () => {
+      clearTimeout(watchdog);
       if (socket !== this.socket || this.stopped) return;
       this.emit({ kind: "state", state: "reconnecting" });
       const delay =
@@ -178,7 +199,6 @@ export class TwitchChat {
 
   private async createSubscriptions(sessionId: string) {
     const token = await validAccessToken(this.accountId);
-    await this.loadBadges(token);
     for (const type of SUBSCRIPTIONS) {
       const response = await fetch(
         "https://api.twitch.tv/helix/eventsub/subscriptions",
@@ -203,6 +223,7 @@ export class TwitchChat {
       if (!response.ok)
         throw new Error(`Unable to subscribe to ${type} (${response.status})`);
     }
+    await this.loadBadges(token);
   }
 
   private async loadBadges(token: string) {
@@ -238,6 +259,7 @@ export class TwitchChat {
   stop() {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.validationTimer) clearInterval(this.validationTimer);
     this.socket?.close();
     this.socket = undefined;
     this.emit({ kind: "state", state: "connecting" });

@@ -1,0 +1,12 @@
+services:
+  openstreamalert:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    env_file: .env
+    volumes:
+      - openstreamalert-data:/app/data
+
+volumes:
+  openstreamalert-data:

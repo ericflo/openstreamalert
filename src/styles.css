@@ -590,6 +590,13 @@ input[type="color"] {
 .rotate-button:hover {
   color: #f0edf6;
 }
+.account-actions {
+  display: flex;
+  justify-content: space-between;
+}
+.rotate-button.danger:hover {
+  color: #fb7185;
+}
 footer {
   border-top: 1px solid var(--line);
   padding: 28px clamp(24px, 4vw, 64px);

@@ -126,6 +126,17 @@ export function Studio() {
     await loadStatus();
   }
 
+  async function deleteData() {
+    if (
+      !confirm(
+        "Delete your OpenStreamAlert data and revoke Twitch access? This cannot be undone.",
+      )
+    )
+      return;
+    await fetch("/api/account", { method: "DELETE" });
+    await loadStatus();
+  }
+
   return (
     <div className="studio-shell">
       <header className="topbar">
@@ -140,7 +151,7 @@ export function Studio() {
           </a>
           {status?.account && (
             <button className="text-button" onClick={logout}>
-              Disconnect
+              Sign out
             </button>
           )}
         </nav>
@@ -447,9 +458,17 @@ export function Studio() {
                   when active” off. Your URL is a secret.
                 </p>
                 {status?.account && (
-                  <button className="rotate-button" onClick={rotateUrl}>
-                    Rotate private URL
-                  </button>
+                  <div className="account-actions">
+                    <button className="rotate-button" onClick={rotateUrl}>
+                      Rotate private URL
+                    </button>
+                    <button
+                      className="rotate-button danger"
+                      onClick={deleteData}
+                    >
+                      Delete account data
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

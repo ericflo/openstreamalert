@@ -65,6 +65,8 @@ export function requireSameOrigin(
   next: NextFunction,
 ) {
   const origin = request.get("origin");
+  if (!origin && config.production)
+    return response.status(403).json({ error: "Origin required" });
   if (origin && origin !== new URL(config.appUrl).origin)
     return response.status(403).json({ error: "Invalid origin" });
   next();
