@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { defaultSettings, overlaySettingsSchema } from "./settings";
+import {
+  defaultSettings,
+  overlaySettingsSchema,
+  parseSettings,
+} from "./settings";
 
 describe("overlay settings", () => {
   it("keeps the shipped defaults valid", () => {
@@ -19,5 +23,21 @@ describe("overlay settings", () => {
         maxMessages: 10_000,
       }).success,
     ).toBe(false);
+  });
+
+  it("migrates older stored settings by filling new defaults", () => {
+    const old = { ...defaultSettings } as Record<string, unknown>;
+    delete old.showNotices;
+    delete old.blockedUsers;
+    expect(parseSettings(old)).toMatchObject({
+      showNotices: true,
+      blockedUsers: [],
+    });
+  });
+
+  it("falls back safely when persisted settings are malformed", () => {
+    expect(parseSettings({ ...defaultSettings, maxMessages: "many" })).toEqual(
+      defaultSettings,
+    );
   });
 });
