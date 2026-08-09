@@ -33,14 +33,16 @@ npm run check
 npm run test:coverage
 npm run build
 npm run test:e2e
+npm run make:win      # on Windows x64
 docker build --build-arg VERSION=vX.Y.Z --build-arg REVISION="$(git rev-parse HEAD)" -t openstreamalert:vX.Y.Z .
 ```
 
 Before creating a tag, manually run the **Release** workflow from `main`. Its
-read-only dry-run job performs the exact QEMU-backed amd64/arm64 OCI build and
-platform-specific Trivy gates, then skips every login, package, attestation, and
-release step. A dry run proves packaging feasibility without Twitch credentials
-or registry mutation; it does not waive the live acceptance gate.
+read-only dry-run jobs perform the exact QEMU-backed amd64/arm64 OCI build,
+platform-specific Trivy gates, and Windows Squirrel/ZIP packaging, then skip
+every login, package, attestation, and release step. A dry run proves packaging
+feasibility without Twitch credentials or registry mutation; it does not waive
+the live acceptance gate.
 
 Boot the image with a temporary data volume, wait for `/readyz`, confirm its
 reported version, restart it, and verify that settings persisted. Test a backup
@@ -53,6 +55,10 @@ and private overlay URLs from all captured evidence.
 
 - Complete OAuth, save settings, copy the private URL, and load it in OBS 31 or
   later on each supported operating system.
+- On Windows 10 and 11, install as a standard user, complete Device Code Grant,
+  close the studio to the tray, restart the desktop app, and confirm the same OBS
+  URL and settings survive. Verify explicit Quit closes port 17071 and a second
+  launch focuses the existing instance.
 - Verify ordinary messages, long and non-Latin text, native emotes, badges,
   replies, actions, notices, message deletion, user clearing, and chat clearing.
 - Exercise OBS scene hide/show, Browser Source refresh, an ordinary network
@@ -78,8 +84,9 @@ release even when CI is green.
   builds a staged amd64/arm64 OCI layout, and scans both platforms before it can
   log in to GHCR. It then publishes immutable version and commit-SHA tags with
   OCI metadata, SBOM and provenance, verifies both platforms in the published
-  digest, and creates the GitHub release. It intentionally publishes no `latest`
-  tag.
+  digest, builds the Windows installer and portable ZIP, verifies both Windows
+  executables have the configured Authenticode identity, and creates the GitHub
+  release with those assets. It intentionally publishes no `latest` tag.
 - Re-run the clean-install and container readiness smoke against published
   artifacts, verify documentation links, and confirm the release is readable
   without maintainer-only permissions.

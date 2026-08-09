@@ -40,6 +40,16 @@ analytics, and does not put Twitch credentials in the OBS URL.
 
 ## Quick start
 
+### Windows desktop
+
+The primary Windows path is a self-contained tray application: install, approve
+Twitch with a one-time code, and copy the OBS URL. It requires no Node.js,
+Docker, terminal, OpenSSL, or embedded client secret. The installer is already
+built and smoke-tested in CI, but remains pre-release until Windows code signing
+and the live Twitch/OBS gate pass. See the [Windows guide](docs/WINDOWS.md).
+
+### Source and server demo
+
 You need [Node.js 24+](https://nodejs.org/). To try every design control with
 representative demo chat—without Twitch credentials or an `.env` file—run:
 
@@ -131,8 +141,9 @@ flowchart LR
   S -->|encrypted tokens + settings| Q[(SQLite)]
 ```
 
-The React studio and overlay ship from the same Express service. The server
-uses Twitch's authorization-code flow and requests only `user:read:chat`. OBS
+The React studio and overlay ship from the same Express service. Hosted installs
+use Twitch's authorization-code flow; the Windows desktop uses secretless device
+authorization. Both request only `user:read:chat`. OBS
 receives an unguessable, revocable overlay key—not an OAuth credential. One
 EventSub connection exists while a studio preview or overlay is watching, and
 events are normalized into a small safe rendering model before they reach the
@@ -149,6 +160,7 @@ and the source-backed [research notes](docs/RESEARCH.md) for the details.
 - [Privacy and data lifecycle](docs/PRIVACY.md)
 - [Product scope and principles](docs/PRODUCT.md)
 - [Credential-free public demo deployment](docs/PUBLIC_DEMO.md)
+- [Windows installer, tray lifecycle, and source builds](docs/WINDOWS.md)
 - [Credential-free Twitch CLI protocol test](docs/TWITCH_CLI_TESTING.md)
 - [Release gates and live acceptance checklist](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)
@@ -165,9 +177,8 @@ CodeQL and dependency review are prepared and activate when the repository
 becomes public; GitHub does not provide their code-scanning backend to this
 private repository without GHAS.
 
-The next priorities are packaged desktop/local setup, third-party emote adapters
-(7TV, BTTV, FFZ), multiple simultaneous scene profiles, and richer operator
-diagnostics.
+The next priorities are a signed Windows beta, third-party emote adapters (7TV,
+BTTV, FFZ), multiple simultaneous scene profiles, and richer operator diagnostics.
 Follows, subscriptions, raids, and other alerts come after the chat experience
 is stable and delightful; multi-platform aggregation and a drag-and-drop canvas
 are intentionally out of scope for version one.

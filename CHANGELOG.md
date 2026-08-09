@@ -6,6 +6,11 @@ tagged.
 
 ## Unreleased
 
+- Add a self-contained Windows tray application and Squirrel installer build.
+- Add secretless Twitch Device Code Grant for the desktop public client.
+- Protect the Windows database key with DPAPI-backed Electron secure storage.
+- Add Windows-native browser, SQLite, packaging, loopback, and launch smoke tests.
+
 ### Added
 
 - Responsive design studio with four overlay themes and a no-credentials demo

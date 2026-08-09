@@ -15,7 +15,8 @@ future hosted edition can split them without rewriting the product.
 
 ## Server-owned Twitch credentials
 
-Twitch OAuth uses the authorization-code flow. Access and refresh tokens are
+Hosted Twitch OAuth uses the authorization-code flow; the Windows public client
+uses Device Code Grant so no client secret is distributed. Access and refresh tokens are
 encrypted at rest with an operator-provided key. Browser sessions use opaque,
 HTTP-only cookies. Neither the studio nor the OBS page can read Twitch tokens.
 

@@ -45,4 +45,9 @@ Release candidates must also pass the live Twitch and OBS gate in the
 [release checklist](docs/RELEASING.md). Demo-mode tests alone do not certify the
 production integration.
 
+Windows desktop changes must pass `npm run make:win` on Windows, the packaged
+loopback/readiness smoke, and the security expectations in the
+[Windows guide](docs/WINDOWS.md). Never add a Twitch client secret to a desktop
+build; Device Code Grant uses only the configured public client ID.
+
 By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

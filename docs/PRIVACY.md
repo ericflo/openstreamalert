@@ -32,3 +32,9 @@ tokens from SQLite.
 Self-hosters control their own server logs and reverse proxy. Configure those
 systems not to retain full overlay paths, protect database backups and
 `ENCRYPTION_KEY`, and publish a privacy notice if other people use the instance.
+
+On Windows, data is stored beneath the current user's
+`%APPDATA%\OpenStreamAlert` directory. The desktop app generates the encryption
+key automatically and protects it with Windows DPAPI through Electron
+`safeStorage`. The packaged public client contains a Twitch client ID, which is
+not a secret, but never contains a Twitch client secret.

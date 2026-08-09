@@ -1,5 +1,9 @@
 # Setup and deployment
 
+For the self-contained Windows installer and tray workflow, start with the
+[Windows guide](WINDOWS.md). The steps below describe source and hosted-server
+deployments.
+
 ## 1. Register a Twitch application
 
 Open the [Twitch developer console](https://dev.twitch.tv/console/apps), enable
@@ -55,11 +59,15 @@ A design-only server needs no Twitch application. Leave all Twitch fields and
 `/readyz` reports `mode: "demo"` and live chat remains disabled. For a static,
 zero-server deployment, use the [GitHub Pages public demo](PUBLIC_DEMO.md).
 
-Compose binds to `127.0.0.1` by default so the unencrypted application is not
-accidentally exposed to the network. Set `BIND_ADDRESS` in `.env` only when a
-trusted firewall or reverse proxy requires another interface. `PORT` controls
-the host-side port; the container always listens on 5173. The service runs as a
-non-root user with a read-only root filesystem and writes only to its data volume.
+Native Node and Compose host publishing bind to `127.0.0.1` by default so the
+unencrypted application is not accidentally exposed to the network. Set
+`BIND_ADDRESS` in `.env` only when a trusted firewall or reverse proxy requires
+another interface; `0.0.0.0` exposes it on every IPv4 interface. With Compose,
+this value controls the host-side publication while the process listens on the
+container interface. `PORT` controls the host-side port; the container always
+listens on 5173 and its image explicitly listens on `0.0.0.0` inside the
+container. The service runs as a non-root user with a read-only root
+filesystem and writes only to its data volume.
 
 `GET /livez` reports process liveness. `GET /readyz` verifies SQLite readiness
 and reports demo/Twitch mode plus `BUILD_VERSION`; use it for deployment health

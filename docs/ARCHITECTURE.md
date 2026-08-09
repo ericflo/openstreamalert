@@ -3,21 +3,25 @@
 OpenStreamAlert is one deployable TypeScript service with four deliberately
 small boundaries.
 
-| Boundary       | Responsibility                                                               |
-| -------------- | ---------------------------------------------------------------------------- |
-| React studio   | Authentication entry point, visual settings, preview, private URL management |
-| React overlay  | Transparent rendering, bounded message lifetime, native SSE recovery         |
-| Express server | OAuth, sessions, validation, public overlay endpoints, static assets         |
-| Twitch adapter | Token refresh, badge metadata, EventSub lifecycle, normalized chat events    |
+| Boundary         | Responsibility                                                               |
+| ---------------- | ---------------------------------------------------------------------------- |
+| React studio     | Authentication entry point, visual settings, preview, private URL management |
+| React overlay    | Transparent rendering, bounded message lifetime, native SSE recovery         |
+| Express server   | OAuth, sessions, validation, public overlay endpoints, static assets         |
+| Twitch adapter   | Token refresh, badge metadata, EventSub lifecycle, normalized chat events    |
+| Electron desktop | Windows lifecycle, DPAPI key protection, tray, and stable loopback listener  |
 
 SQLite persists accounts, encrypted credentials, sessions, overlay keys, and
 settings. Chat events are never inserted into the database.
 
 ## Runtime sequence
 
-1. A broadcaster authorizes the single `user:read:chat` scope.
-2. The callback exchanges the code server-side, validates it, encrypts both
-   tokens with AES-256-GCM, and creates an HTTP-only session.
+1. A broadcaster authorizes the single `user:read:chat` scope. Hosted servers
+   use an authorization-code callback; the Windows public client uses a
+   one-time device code and contains no client secret.
+2. The service validates the grant, encrypts both tokens with AES-256-GCM, and
+   creates an HTTP-only session. Windows protects the generated encryption key
+   with DPAPI through Electron `safeStorage`.
 3. The studio saves validated settings and presents a random 256-bit overlay URL.
 4. OBS loads that URL. The server looks up the owner and opens an EventSub
    WebSocket when the first SSE viewer arrives.

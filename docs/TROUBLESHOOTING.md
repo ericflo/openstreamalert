@@ -1,5 +1,14 @@
 # Troubleshooting
 
+## Windows desktop app is not visible
+
+Closing the studio keeps its local OBS service running in the notification
+area. Double-click the OpenStreamAlert tray icon to reopen it, or use its menu to
+quit completely. If OBS cannot reach the source, confirm
+`http://127.0.0.1:17071/readyz` opens locally. See the dedicated
+[Windows guide](WINDOWS.md) for port conflicts, activation codes, and installer
+details.
+
 ## The studio says “Twitch setup needed”
 
 At least one of `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, or `ENCRYPTION_KEY`
