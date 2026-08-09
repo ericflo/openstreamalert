@@ -44,4 +44,4 @@ jobs:
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - name: Deploy public demo
         id: deployment
-        uses: actions/deploy-pages@f5a691325ee5d2a31178033a5e7cc7c5a836d987 # v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
