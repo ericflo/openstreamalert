@@ -15,6 +15,9 @@ services:
     env_file: .env
     environment:
       PORT: 5173
+      # The published host port remains loopback-only by default; the process
+      # must listen on the container interface for that publication to work.
+      BIND_ADDRESS: 0.0.0.0
       DATABASE_PATH: /app/data/openstreamalert.sqlite
       BUILD_VERSION: ${BUILD_VERSION:-development}
     read_only: true

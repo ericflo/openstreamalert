@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "./app";
 import { config } from "./config";
+import { deleteAccount } from "./database";
 
 describe("HTTP application", () => {
   it("reports liveness, database readiness, and demo status", async () => {
@@ -157,5 +158,93 @@ describe("HTTP application", () => {
 
     expect(callback.headers["set-cookie"]?.[0]).toContain("Max-Age=0");
     expect(twitchFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("completes desktop device authorization without a client secret", async () => {
+    const previous = {
+      runtimeMode: config.runtimeMode,
+      clientId: config.twitchClientId,
+      clientSecret: config.twitchClientSecret,
+      encryptionKey: config.encryptionKey,
+    };
+    config.runtimeMode = "desktop";
+    config.twitchClientId = "desktop-client";
+    config.twitchClientSecret = "";
+    config.encryptionKey = Buffer.alloc(32, 1).toString("base64");
+    const twitchFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          device_code: "private-code",
+          user_code: "JOIN-NOW",
+          verification_uri: "https://www.twitch.tv/activate",
+          expires_in: 600,
+          interval: 1,
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: "desktop-access",
+          refresh_token: "desktop-refresh",
+          expires_in: 14_400,
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          user_id: "desktop-user",
+          login: "desktop_user",
+          client_id: "desktop-client",
+          scopes: ["user:read:chat"],
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ data: [{ display_name: "Desktop User" }] }),
+      );
+    try {
+      const app = await createApp({ serveClient: false, twitchFetch });
+      const desktopHost = new URL(config.appUrl).host;
+      await request(app)
+        .get("/readyz")
+        .set("Host", "attacker.example")
+        .expect(421, { error: "Unexpected desktop host" });
+      const start = await request(app)
+        .get("/api/auth/twitch")
+        .set("Host", desktopHost)
+        .expect(302)
+        .expect("Location", "/auth/device");
+      const cookie = start.headers["set-cookie"]?.[0].split(";")[0];
+      expect(cookie).toContain("osa_oauth_state=");
+      expect(start.headers["set-cookie"]?.[0]).toContain("Max-Age=600");
+
+      const activation = await request(app)
+        .get("/api/auth/device")
+        .set("Host", desktopHost)
+        .set("Cookie", cookie)
+        .expect(200);
+      expect(activation.body).toMatchObject({
+        userCode: "JOIN-NOW",
+        verificationUri: "https://www.twitch.tv/activate",
+      });
+      expect(JSON.stringify(activation.body)).not.toContain("private-code");
+
+      const connected = await request(app)
+        .post("/api/auth/device/poll")
+        .set("Host", desktopHost)
+        .set("Origin", config.appUrl)
+        .set("Cookie", cookie)
+        .expect(200, { state: "authorized" });
+      expect(connected.headers["set-cookie"].join(";")).toContain(
+        "osa_session=",
+      );
+      expect(String(twitchFetch.mock.calls[1][1]?.body)).not.toContain(
+        "client_secret",
+      );
+    } finally {
+      deleteAccount("desktop-user");
+      config.runtimeMode = previous.runtimeMode;
+      config.twitchClientId = previous.clientId;
+      config.twitchClientSecret = previous.clientSecret;
+      config.encryptionKey = previous.encryptionKey;
+    }
   });
 });

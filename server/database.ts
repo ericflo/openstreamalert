@@ -10,14 +10,16 @@ import {
 } from "../shared/settings.js";
 
 fs.mkdirSync(path.dirname(config.databasePath), { recursive: true });
-fs.chmodSync(path.dirname(config.databasePath), 0o700);
+if (process.platform !== "win32")
+  fs.chmodSync(path.dirname(config.databasePath), 0o700);
 const db = new Database(config.databasePath);
-fs.chmodSync(config.databasePath, 0o600);
+if (process.platform !== "win32") fs.chmodSync(config.databasePath, 0o600);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 for (const suffix of ["-wal", "-shm"]) {
   const file = `${config.databasePath}${suffix}`;
-  if (fs.existsSync(file)) fs.chmodSync(file, 0o600);
+  if (process.platform !== "win32" && fs.existsSync(file))
+    fs.chmodSync(file, 0o600);
 }
 const INITIAL_SCHEMA = `
   CREATE TABLE IF NOT EXISTS accounts (
@@ -77,6 +79,10 @@ export function migrateDatabase(target: Database.Database) {
 }
 
 migrateDatabase(db);
+
+export function closeDatabase() {
+  if (db.open) db.close();
+}
 
 export interface Account {
   id: string;
@@ -155,7 +161,7 @@ export function accountCanConnect(id: string, login: string) {
   const row = db.prepare("SELECT COUNT(*) AS count FROM accounts").get() as {
     count: number;
   };
-  return !config.production && row.count === 0;
+  return config.runtimeMode !== "hosted" && row.count === 0;
 }
 
 export function deleteSession(token?: string) {

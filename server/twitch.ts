@@ -95,16 +95,18 @@ async function ensureValidAccessToken(
     return tokens.accessToken;
   }
 
+  const refreshBody = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: tokens.refreshToken,
+    client_id: dependencies.clientId,
+  });
+  if (dependencies.clientSecret)
+    refreshBody.set("client_secret", dependencies.clientSecret);
   const response = await dependencies.fetch(
     "https://id.twitch.tv/oauth2/token",
     {
       method: "POST",
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: tokens.refreshToken,
-        client_id: dependencies.clientId,
-        client_secret: dependencies.clientSecret,
-      }),
+      body: refreshBody,
     },
   );
   if (!response.ok) {

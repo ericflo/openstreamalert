@@ -23,6 +23,7 @@ LABEL org.opencontainers.image.title="OpenStreamAlert" \
   org.opencontainers.image.created="${CREATED}"
 ENV NODE_ENV=production \
   PORT=5173 \
+  BIND_ADDRESS=0.0.0.0 \
   DATABASE_PATH=/app/data/openstreamalert.sqlite \
   BUILD_VERSION=${VERSION}
 WORKDIR /app

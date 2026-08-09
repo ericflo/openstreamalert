@@ -26,6 +26,7 @@ interface Status {
   overlay: { settings: OverlaySettings; url: string; enabled: boolean } | null;
   connection: FeedStatus | null;
   version: string;
+  runtimeMode: "development" | "hosted" | "desktop";
 }
 
 const presets: Array<{
@@ -184,6 +185,7 @@ export function Studio() {
         overlay: null,
         connection: null,
         version: "public-demo",
+        runtimeMode: "hosted",
       });
       setFeedStatus({ state: "idle" });
       return;
@@ -397,6 +399,14 @@ export function Studio() {
   }
 
   const connected = feedStatus.state === "connected";
+  const connectionLabel: Record<FeedStatus["state"], string> = {
+    idle: "Idle",
+    connecting: "Connecting",
+    connected: "Live",
+    reconnecting: "Reconnecting",
+    paused: "Paused",
+    error: "Needs attention",
+  };
   const previewStatus = {
     state:
       feedStatus.state === "idle" ? ("connected" as const) : feedStatus.state,
@@ -427,7 +437,7 @@ export function Studio() {
         {uiError && (
           <div className="error-banner" role="alert">
             <span>{uiError}</span>
-            {status?.configured && !connected && (
+            {status?.configured && feedStatus.state === "error" && (
               <a href="/api/auth/twitch">Reconnect Twitch</a>
             )}
             <button onClick={() => setUiError(null)} aria-label="Dismiss error">
@@ -465,9 +475,9 @@ export function Studio() {
                   <strong>{status.account.displayName}</strong>
                 </div>
                 <span className={`connected-pill ${feedStatus.state}`}>
-                  {connected ? "Live" : feedStatus.state}
+                  {connectionLabel[feedStatus.state]}
                 </span>
-                {!connected && (
+                {feedStatus.state === "error" && (
                   <a
                     className="button compact secondary"
                     href="/api/auth/twitch"
@@ -490,9 +500,11 @@ export function Studio() {
                   <strong>
                     {status.configured
                       ? "Connect Twitch"
-                      : publicDemo
-                        ? "Try every design control"
-                        : "Twitch setup needed"}
+                      : status.runtimeMode === "desktop"
+                        ? "Desktop preview needs a client ID"
+                        : publicDemo
+                          ? "Try every design control"
+                          : "Twitch setup needed"}
                   </strong>
                 </div>
                 {status.configured ? (
@@ -502,7 +514,11 @@ export function Studio() {
                 ) : (
                   <a
                     className="button compact secondary"
-                    href="https://github.com/ericflo/openstreamalert#quick-start"
+                    href={
+                      status.runtimeMode === "desktop"
+                        ? "https://github.com/ericflo/openstreamalert/blob/main/docs/WINDOWS.md"
+                        : "https://github.com/ericflo/openstreamalert#quick-start"
+                    }
                   >
                     Setup
                   </a>

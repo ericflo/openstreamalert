@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { randomBytes } from "node:crypto";
+import { isIP } from "node:net";
 import path from "node:path";
 
 const port = Number(process.env.PORT ?? 5173);
@@ -7,10 +8,26 @@ const appUrl = (process.env.APP_URL ?? `http://localhost:${port}`).replace(
   /\/$/,
   "",
 );
+const desktop = process.env.OPENSTREAMALERT_DESKTOP === "1";
+
+export function parseBindAddress(value: string | undefined) {
+  const address = value?.trim() || "127.0.0.1";
+  if (address !== "localhost" && isIP(address) === 0)
+    throw new Error(
+      "BIND_ADDRESS must be localhost or an IPv4/IPv6 address without a port",
+    );
+  return address;
+}
 
 export const config = {
   port,
   appUrl,
+  bindAddress: parseBindAddress(process.env.BIND_ADDRESS),
+  runtimeMode: desktop
+    ? ("desktop" as const)
+    : process.env.NODE_ENV === "production"
+      ? ("hosted" as const)
+      : ("development" as const),
   databasePath: path.resolve(
     process.env.DATABASE_PATH ?? "./data/openstreamalert.sqlite",
   ),
@@ -18,6 +35,7 @@ export const config = {
   twitchClientSecret: process.env.TWITCH_CLIENT_SECRET ?? "",
   encryptionKey: process.env.ENCRYPTION_KEY ?? "",
   production: process.env.NODE_ENV === "production",
+  clientPath: path.resolve(process.env.CLIENT_PATH ?? "dist/client"),
   sessionDays: 30,
   allowedTwitchUsers: (process.env.TWITCH_ALLOWED_USERS ?? "")
     .split(",")
@@ -47,14 +65,25 @@ const twitchParts = [
   config.twitchClientSecret,
   config.encryptionKey,
 ];
-if (twitchParts.some(Boolean) && !twitchParts.every(Boolean))
+if (!desktop && twitchParts.some(Boolean) && !twitchParts.every(Boolean))
   throw new Error(
     "TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, and ENCRYPTION_KEY must be configured together",
   );
-if (twitchParts.every(Boolean)) {
+if (desktop && config.twitchClientSecret)
+  throw new Error(
+    "Desktop mode must use Twitch device authorization without a client secret",
+  );
+if (desktop && config.twitchClientId && !config.encryptionKey)
+  throw new Error(
+    "Desktop mode requires ENCRYPTION_KEY when TWITCH_CLIENT_ID is configured",
+  );
+if (
+  (!desktop && twitchParts.every(Boolean)) ||
+  (desktop && config.encryptionKey)
+) {
   if (Buffer.from(config.encryptionKey, "base64").length !== 32)
     throw new Error("ENCRYPTION_KEY must be 32 bytes encoded as base64");
-  if (config.production && config.allowedTwitchUsers.length === 0)
+  if (config.runtimeMode === "hosted" && config.allowedTwitchUsers.length === 0)
     throw new Error(
       "TWITCH_ALLOWED_USERS is required for a configured production deployment",
     );
@@ -62,8 +91,15 @@ if (twitchParts.every(Boolean)) {
 
 export function twitchIsConfigured() {
   return Boolean(
-    config.twitchClientId && config.twitchClientSecret && config.encryptionKey,
+    config.twitchClientId &&
+    config.encryptionKey &&
+    (config.runtimeMode === "desktop" || config.twitchClientSecret),
   );
+}
+
+export function twitchAuthMode() {
+  if (!twitchIsConfigured()) return null;
+  return config.runtimeMode === "desktop" ? "device" : "authorization-code";
 }
 
 export function randomToken(bytes = 32) {

@@ -389,6 +389,43 @@ describe("Twitch EventSub lifecycle", () => {
 });
 
 describe("Twitch access tokens", () => {
+  it("refreshes a public desktop token without sending a client secret", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      Response.json({
+        access_token: "next-access",
+        refresh_token: "next-refresh",
+        expires_in: 3_600,
+      }),
+    );
+    const updateTokens = vi.fn();
+    const provider = createAccessTokenProvider({
+      getTokens: vi.fn(() => ({
+        accessToken: "expired-access",
+        refreshToken: "single-use-refresh",
+        expiresAt: 0,
+        validatedAt: 0,
+      })),
+      markTokenValidated: vi.fn(),
+      updateTokens,
+      deleteSessionsForAccount: vi.fn(),
+      fetch,
+      now: () => 1_000,
+      clientId: "public-client",
+      clientSecret: "",
+    });
+
+    await expect(provider("42")).resolves.toBe("next-access");
+    const body = fetch.mock.calls[0][1]?.body as URLSearchParams;
+    expect(body.get("client_id")).toBe("public-client");
+    expect(body.has("client_secret")).toBe(false);
+    expect(updateTokens).toHaveBeenCalledWith(
+      "42",
+      "next-access",
+      "next-refresh",
+      3_601_000,
+    );
+  });
+
   it("treats a transient refresh failure as retryable", async () => {
     const deleteSessionsForAccount = vi.fn();
     const provider = createAccessTokenProvider({

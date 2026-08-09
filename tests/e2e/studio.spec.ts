@@ -303,3 +303,87 @@ test("default chat stays in bounds over bright and dark video at 320px", async (
     });
   }
 });
+
+test("device authorization explains the one-time Twitch handoff", async ({
+  page,
+}) => {
+  await page.route("**/api/auth/device", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        userCode: "JOIN-NOW",
+        verificationUri: "https://www.twitch.tv/activate",
+        expiresAt: Date.now() + 600_000,
+        intervalMs: 60_000,
+      }),
+    });
+  });
+  await page.goto("/auth/device");
+
+  await expect(
+    page.getByRole("heading", { name: "Connect in your browser." }),
+  ).toBeVisible();
+  await expect(page.getByText("JOIN-NOW")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Twitch" })).toHaveAttribute(
+    "href",
+    "https://www.twitch.tv/activate",
+  );
+  await expect(page.locator("body")).not.toContainText("device_code");
+  await expect(page.getByRole("link", { name: "Cancel" })).toHaveAttribute(
+    "href",
+    "/",
+  );
+  await expect(page.getByText(/min remaining/)).toBeVisible();
+});
+
+test("device authorization finishes automatically after Twitch approval", async ({
+  page,
+}) => {
+  await page.route("**/api/auth/device", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        userCode: "READY-NOW",
+        verificationUri: "https://www.twitch.tv/activate",
+        expiresAt: Date.now() + 60_000,
+        intervalMs: 1,
+      }),
+    });
+  });
+  await page.route("**/api/auth/device/poll", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ state: "authorized" }),
+    });
+  });
+  await page.goto("/auth/device");
+  await expect(page).toHaveURL(/connected=1/);
+});
+
+test("device authorization distinguishes a declined connection", async ({
+  page,
+}) => {
+  await page.route("**/api/auth/device", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        userCode: "NOPE-NOW",
+        verificationUri: "https://www.twitch.tv/activate",
+        expiresAt: Date.now() + 60_000,
+        intervalMs: 1,
+      }),
+    });
+  });
+  await page.route("**/api/auth/device/poll", async (route) => {
+    await route.fulfill({
+      status: 410,
+      contentType: "application/json",
+      body: JSON.stringify({ state: "denied" }),
+    });
+  });
+  await page.goto("/auth/device");
+  await expect(
+    page.getByText("Twitch connection was declined. Nothing was changed."),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Try again" })).toBeVisible();
+});

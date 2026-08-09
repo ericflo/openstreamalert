@@ -30,9 +30,10 @@ export function setCookie(
   value: string,
   maxAge: number,
 ) {
+  const secure = new URL(config.appUrl).protocol === "https:";
   response.append(
     "Set-Cookie",
-    `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${config.production ? "; Secure" : ""}`,
+    `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`,
   );
 }
 

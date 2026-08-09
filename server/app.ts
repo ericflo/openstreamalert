@@ -9,7 +9,12 @@ import {
   session,
   setCookie,
 } from "./auth.js";
-import { config, randomToken, twitchIsConfigured } from "./config.js";
+import {
+  config,
+  randomToken,
+  twitchAuthMode,
+  twitchIsConfigured,
+} from "./config.js";
 import {
   accountCanConnect,
   createSession,
@@ -25,6 +30,7 @@ import {
   setOverlayEnabled,
 } from "./database.js";
 import { fetchWithTimeout } from "./http.js";
+import { DeviceAuthorizationManager } from "./device-auth.js";
 import { overlayStreams } from "./overlay-streams.js";
 import { chats } from "./twitch.js";
 
@@ -35,10 +41,19 @@ export interface AppOptions {
 
 export async function createApp(options: AppOptions = {}) {
   const twitchFetch = options.twitchFetch ?? fetchWithTimeout;
+  const deviceAuthorizations = new DeviceAuthorizationManager(
+    config.twitchClientId,
+    twitchFetch,
+  );
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
   app.use((request, response, next) => {
+    if (
+      config.runtimeMode === "desktop" &&
+      request.get("host") !== new URL(config.appUrl).host
+    )
+      return response.status(421).json({ error: "Unexpected desktop host" });
     response.set({
       "Referrer-Policy": "no-referrer",
       "X-Content-Type-Options": "nosniff",
@@ -89,6 +104,7 @@ export async function createApp(options: AppOptions = {}) {
         : null,
       connection: request.account ? chats.snapshot(request.account.id) : null,
       version: config.buildVersion,
+      runtimeMode: config.runtimeMode,
     });
   });
 
@@ -103,9 +119,80 @@ export async function createApp(options: AppOptions = {}) {
     });
   });
 
-  app.get("/api/auth/twitch", (_request, response) => {
+  async function finishAuthorization(
+    token: { access_token: string; refresh_token: string; expires_in: number },
+    response: Response,
+  ) {
+    const validationResponse = await twitchFetch(
+      "https://id.twitch.tv/oauth2/validate",
+      { headers: { Authorization: `OAuth ${token.access_token}` } },
+    );
+    if (!validationResponse.ok) throw new Error("token validation failed");
+    const user = (await validationResponse.json()) as {
+      user_id: string;
+      login: string;
+      client_id: string;
+      scopes?: string[];
+    };
+    if (user.client_id !== config.twitchClientId)
+      throw new Error("client ID mismatch");
+    if (!user.scopes?.includes("user:read:chat"))
+      throw new Error("required Twitch scope missing");
+    if (!accountCanConnect(user.user_id, user.login))
+      throw new AuthorizationRejectedError();
+    const userResponse = await twitchFetch(
+      `https://api.twitch.tv/helix/users?id=${encodeURIComponent(user.user_id)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token.access_token}`,
+          "Client-Id": config.twitchClientId,
+        },
+      },
+    );
+    if (!userResponse.ok)
+      throw new Error(`user lookup failed (${userResponse.status})`);
+    const userData = (await userResponse.json()) as {
+      data?: Array<{ display_name: string }>;
+    };
+    saveAccount({
+      id: user.user_id,
+      login: user.login,
+      displayName: userData.data?.[0]?.display_name ?? user.login,
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token,
+      expiresAt: Date.now() + token.expires_in * 1000,
+    });
+    chats.stop(user.user_id);
+    const sessionToken = createSession(
+      user.user_id,
+      Date.now() + config.sessionDays * 86_400_000,
+    );
+    setCookie(
+      response,
+      "osa_session",
+      sessionToken,
+      config.sessionDays * 86_400,
+    );
+  }
+
+  app.get("/api/auth/twitch", async (_request, response) => {
     if (!twitchIsConfigured())
       return response.redirect("/?error=not-configured");
+    if (twitchAuthMode() === "device") {
+      try {
+        const authorization = await deviceAuthorizations.start();
+        setCookie(
+          response,
+          "osa_oauth_state",
+          authorization.state,
+          authorization.expiresInSeconds,
+        );
+        return response.redirect("/auth/device");
+      } catch (error) {
+        logAuthorizationError("oauth.device_start_failed", error);
+        return response.redirect("/?error=oauth-failed");
+      }
+    }
     const state = randomToken(24);
     setCookie(response, "osa_oauth_state", state, 600);
     const params = new URLSearchParams({
@@ -152,70 +239,66 @@ export async function createApp(options: AppOptions = {}) {
         expires_in: number;
       };
       issuedAccessToken = token.access_token;
-      const validationResponse = await twitchFetch(
-        "https://id.twitch.tv/oauth2/validate",
-        { headers: { Authorization: `OAuth ${token.access_token}` } },
-      );
-      if (!validationResponse.ok) throw new Error("token validation failed");
-      const user = (await validationResponse.json()) as {
-        user_id: string;
-        login: string;
-        client_id: string;
-      };
-      if (user.client_id !== config.twitchClientId)
-        throw new Error("client ID mismatch");
-      if (!accountCanConnect(user.user_id, user.login)) {
-        await revokeToken(token.access_token, twitchFetch);
-        return response.redirect("/?error=not-allowed");
-      }
-      const userResponse = await twitchFetch(
-        `https://api.twitch.tv/helix/users?id=${encodeURIComponent(user.user_id)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token.access_token}`,
-            "Client-Id": config.twitchClientId,
-          },
-        },
-      );
-      if (!userResponse.ok)
-        throw new Error(`user lookup failed (${userResponse.status})`);
-      const userData = (await userResponse.json()) as {
-        data?: Array<{ display_name: string }>;
-      };
-      saveAccount({
-        id: user.user_id,
-        login: user.login,
-        displayName: userData.data?.[0]?.display_name ?? user.login,
-        accessToken: token.access_token,
-        refreshToken: token.refresh_token,
-        expiresAt: Date.now() + token.expires_in * 1000,
-      });
+      await finishAuthorization(token, response);
       issuedAccessToken = undefined;
-      // Replace any cached terminal authorization state from a prior grant.
-      chats.stop(user.user_id);
-      const sessionToken = createSession(
-        user.user_id,
-        Date.now() + config.sessionDays * 86_400_000,
-      );
-      setCookie(
-        response,
-        "osa_session",
-        sessionToken,
-        config.sessionDays * 86_400,
-      );
       response.redirect("/?connected=1");
     } catch (error) {
       if (issuedAccessToken) await revokeToken(issuedAccessToken, twitchFetch);
-      console.error(
-        JSON.stringify({
-          level: "error",
-          event: "oauth.callback_failed",
-          message: safeError(error),
-        }),
-      );
+      if (error instanceof AuthorizationRejectedError)
+        return response.redirect("/?error=not-allowed");
+      logAuthorizationError("oauth.callback_failed", error);
       response.redirect("/?error=oauth-failed");
     }
   });
+
+  app.get("/api/auth/device", (request, response) => {
+    if (twitchAuthMode() !== "device")
+      return response
+        .status(404)
+        .json({ error: "Device authorization unavailable" });
+    const state = cookies(request).osa_oauth_state ?? "";
+    const authorization = deviceAuthorizations.snapshot(state);
+    if (!authorization)
+      return response
+        .status(410)
+        .json({ error: "Device authorization expired" });
+    response.json(authorization);
+  });
+
+  app.post(
+    "/api/auth/device/poll",
+    requireSameOrigin,
+    async (request, response) => {
+      if (twitchAuthMode() !== "device")
+        return response
+          .status(404)
+          .json({ error: "Device authorization unavailable" });
+      const state = cookies(request).osa_oauth_state ?? "";
+      try {
+        const result = await deviceAuthorizations.poll(state);
+        if (result.state === "pending") return response.json(result);
+        if (result.state !== "authorized") {
+          clearCookie(response, "osa_oauth_state");
+          return response.status(410).json(result);
+        }
+        try {
+          await finishAuthorization(result.token, response);
+        } catch (error) {
+          await revokeToken(result.token.access_token, twitchFetch);
+          throw error;
+        }
+        clearCookie(response, "osa_oauth_state");
+        response.json({ state: "authorized" });
+      } catch (error) {
+        deviceAuthorizations.cancel(state);
+        clearCookie(response, "osa_oauth_state");
+        if (error instanceof AuthorizationRejectedError)
+          return response.status(403).json({ state: "denied" });
+        logAuthorizationError("oauth.device_poll_failed", error);
+        response.status(502).json({ state: "error" });
+      }
+    },
+  );
 
   app.put(
     "/api/settings",
@@ -364,7 +447,7 @@ export async function createApp(options: AppOptions = {}) {
 
   if (options.serveClient !== false) {
     if (config.production) {
-      const clientPath = path.resolve("dist/client");
+      const clientPath = config.clientPath;
       app.use(
         express.static(clientPath, {
           index: false,
@@ -447,4 +530,16 @@ async function revokeToken(token: string, twitchFetch = fetchWithTimeout) {
 
 function safeError(error: unknown) {
   return error instanceof Error ? error.message : "Unexpected error";
+}
+
+class AuthorizationRejectedError extends Error {}
+
+function logAuthorizationError(event: string, error: unknown) {
+  console.error(
+    JSON.stringify({
+      level: "error",
+      event,
+      message: safeError(error),
+    }),
+  );
 }

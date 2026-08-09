@@ -906,6 +906,81 @@ footer {
   border: 1px solid rgba(251, 113, 133, 0.25);
 }
 
+.device-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      circle at 50% 20%,
+      rgba(145, 70, 255, 0.18),
+      transparent 36%
+    ),
+    #0b0b0f;
+  color: #f7f6fb;
+}
+.device-card {
+  width: min(520px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 18vh 0 60px;
+  text-align: center;
+}
+.device-card h1 {
+  margin: 14px 0 18px;
+  font-size: clamp(42px, 8vw, 68px);
+  line-height: 0.96;
+}
+.device-card p {
+  max-width: 470px;
+  margin: 0 auto 28px;
+  color: #bcb8c8;
+  line-height: 1.65;
+}
+.device-code {
+  display: flex;
+  width: min(360px, 100%);
+  margin: 0 auto 18px;
+  padding: 22px;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.07);
+  color: inherit;
+  cursor: pointer;
+}
+.device-code:hover,
+.device-code:focus-visible {
+  border-color: #a970ff;
+  outline: 3px solid rgba(169, 112, 255, 0.25);
+}
+.device-code strong {
+  font-family: var(--font-mono);
+  font-size: clamp(32px, 9vw, 48px);
+  letter-spacing: 0.12em;
+}
+.device-code small,
+.device-waiting {
+  color: #aaa6b7;
+}
+.device-card > .button {
+  display: inline-flex;
+  margin-top: 4px;
+}
+.device-waiting {
+  display: block;
+  margin-top: 24px;
+}
+.device-cancel {
+  display: block;
+  width: max-content;
+  margin: 18px auto 0;
+  color: #aaa6b7;
+  font-size: 13px;
+}
+.device-cancel:hover,
+.device-cancel:focus-visible {
+  color: #fff;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chat-message {
     animation: none !important;
