@@ -91,6 +91,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Use the repository package manager
+        run: npm install --global npm@11.12.1
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
@@ -177,7 +179,7 @@ jobs:
               Stop-Process -Force
           }
       - name: Upload Windows package evidence
-        if: always()
+        if: success()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-desktop-${{ github.sha }}

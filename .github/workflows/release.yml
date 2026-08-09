@@ -91,6 +91,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Use the repository package manager
+        run: npm install --global npm@11.12.1
       - run: npm ci
       - name: Configure release signing
         id: signing
