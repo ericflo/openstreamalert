@@ -14,7 +14,11 @@ describe("credential encryption", () => {
   it("rejects tampering and wrong key sizes", () => {
     const key = randomBytes(32);
     const encrypted = encryptWithKey("secret", key);
-    expect(() => decryptWithKey(`${encrypted.slice(0, -1)}x`, key)).toThrow();
+    const parts = encrypted.split(".");
+    const ciphertext = Buffer.from(parts[2], "base64url");
+    ciphertext[0] ^= 1;
+    parts[2] = ciphertext.toString("base64url");
+    expect(() => decryptWithKey(parts.join("."), key)).toThrow();
     expect(() => encryptWithKey("secret", randomBytes(16))).toThrow();
   });
 
