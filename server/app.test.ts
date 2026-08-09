@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp } from "./app";
 import { config } from "./config";
 import { deleteAccount } from "./database";
+import { overlayStreams } from "./overlay-streams";
 
 describe("HTTP application", () => {
   it("reports liveness, database readiness, and demo status", async () => {
@@ -236,6 +237,31 @@ describe("HTTP application", () => {
       expect(connected.headers["set-cookie"].join(";")).toContain(
         "osa_session=",
       );
+      const sessionCookie = connected.headers["set-cookie"]
+        .find((value: string) => value.startsWith("osa_session="))
+        ?.split(";")[0];
+      expect(sessionCookie).toBeTruthy();
+
+      const publish = vi.spyOn(overlayStreams, "publish");
+      const testMessage = await request(app)
+        .post("/api/test-message")
+        .set("Host", desktopHost)
+        .set("Origin", config.appUrl)
+        .set("Cookie", sessionCookie!)
+        .expect(200);
+      expect(testMessage.body).toMatchObject({
+        viewers: 0,
+        event: {
+          kind: "message",
+          userName: "OpenStreamAlert",
+          text: "Your browser source is connected and ready.",
+        },
+      });
+      expect(publish).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ id: expect.stringMatching(/^test-/) }),
+      );
+      publish.mockRestore();
       expect(String(twitchFetch.mock.calls[1][1]?.body)).not.toContain(
         "client_secret",
       );

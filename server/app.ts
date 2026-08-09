@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import express, { type Request, type Response } from "express";
+import type { ChatMessage } from "../shared/events.js";
 import { overlaySettingsSchema } from "../shared/settings.js";
 import {
   clearCookie,
@@ -319,6 +321,40 @@ export async function createApp(options: AppOptions = {}) {
           settings: parsed.data,
         });
       response.json({ settings: parsed.data });
+    },
+  );
+
+  app.post(
+    "/api/test-message",
+    requireAccount,
+    requireSameOrigin,
+    (request, response) => {
+      const overlay = getOverlayForAccount(request.account!.id);
+      if (!overlay)
+        return response.status(404).json({ error: "Overlay not found" });
+      if (!overlay.enabled)
+        return response.status(409).json({ error: "Overlay is paused" });
+
+      const event: ChatMessage = {
+        kind: "message",
+        id: `test-${randomUUID()}`,
+        userId: "openstreamalert-test",
+        userName: "OpenStreamAlert",
+        userColor: "#67e8b0",
+        badges: [],
+        fragments: [
+          {
+            type: "text",
+            text: "Your browser source is connected and ready.",
+          },
+        ],
+        text: "Your browser source is connected and ready.",
+        sentAt: new Date().toISOString(),
+        action: false,
+        firstMessage: false,
+      };
+      overlayStreams.publish(overlay.key, event);
+      response.json({ event, viewers: overlayStreams.count(overlay.key) });
     },
   );
 

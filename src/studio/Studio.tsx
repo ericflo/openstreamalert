@@ -255,12 +255,39 @@ export function Studio() {
     }
   }
 
-  function testMessage() {
-    const event = makeDemoMessage(testIndex.current++);
-    if (event.kind === "message")
+  async function testMessage() {
+    if (!status?.account) {
+      const event = makeDemoMessage(testIndex.current++);
+      if (event.kind === "message")
+        setMessages((current) =>
+          reduceOverlayEvent(current, event, settingsRef.current),
+        );
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/test-message", { method: "POST" });
+      const data = (await response.json()) as {
+        event?: ChatMessage;
+        viewers?: number;
+        error?: string;
+      };
+      if (!response.ok || !data.event)
+        throw new Error(data.error ?? "Test message could not be sent");
       setMessages((current) =>
-        reduceOverlayEvent(current, event, settingsRef.current),
+        reduceOverlayEvent(current, data.event!, settingsRef.current),
       );
+      if (!data.viewers)
+        setUiError(
+          "The preview works, but no OBS or browser overlay is connected. Open the copied OBS URL and try again.",
+        );
+    } catch (error) {
+      setUiError(
+        error instanceof Error
+          ? error.message
+          : "Test message could not be sent",
+      );
+    }
   }
 
   function overlayUrl() {
@@ -822,7 +849,7 @@ export function Studio() {
                 {status?.account ? "Live Twitch preview" : "Interactive demo"}{" "}
                 <small>500 × 700 viewport</small>
               </div>
-              <button onClick={testMessage}>+ Test message</button>
+              <button onClick={() => void testMessage()}>+ Test message</button>
             </div>
             <div className="preview-stage">
               <div className="preview-viewport">

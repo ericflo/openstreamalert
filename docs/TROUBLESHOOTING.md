@@ -32,8 +32,9 @@ use `localhost` in one place and `127.0.0.1` in the other.
 6. Reconnect Twitch in the studio if the overlay reports authorization trouble.
 
 An empty transparent page can also mean chat is connected but nobody has spoken.
-Use **Test message** in the studio to validate the appearance; demo messages do
-not travel into OBS for a connected account.
+Use **Test message** in the studio to send a synthetic message through every
+connected OBS/browser overlay. The studio reports when no overlay viewer is
+connected, which distinguishes an idle chat from a stale or incorrect URL.
 
 ## Messages disappear during scene changes
 
