@@ -134,6 +134,17 @@ export function Studio() {
   }, [settings]);
 
   useEffect(() => {
+    if (!settings.messageLifetime) return;
+    const timer = setInterval(() => {
+      const cutoff = Date.now() - settings.messageLifetime * 1_000;
+      setMessages((current) =>
+        current.filter((message) => Date.parse(message.sentAt) > cutoff),
+      );
+    }, 1_000);
+    return () => clearInterval(timer);
+  }, [settings.messageLifetime]);
+
+  useEffect(() => {
     void loadStatus();
   }, []);
 

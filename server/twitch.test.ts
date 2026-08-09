@@ -389,6 +389,30 @@ describe("Twitch EventSub lifecycle", () => {
 });
 
 describe("Twitch access tokens", () => {
+  it("treats a transient refresh failure as retryable", async () => {
+    const deleteSessionsForAccount = vi.fn();
+    const provider = createAccessTokenProvider({
+      getTokens: vi.fn(() => ({
+        accessToken: "expired-access",
+        refreshToken: "refresh-token",
+        expiresAt: 0,
+        validatedAt: 0,
+      })),
+      markTokenValidated: vi.fn(),
+      updateTokens: vi.fn(),
+      deleteSessionsForAccount,
+      fetch: vi.fn().mockResolvedValue(new Response(null, { status: 503 })),
+      now: () => 1_000_000,
+      clientId: "client-id",
+      clientSecret: "client-secret",
+    });
+
+    await expect(provider("42")).rejects.toThrow(
+      "Twitch token refresh failed (503)",
+    );
+    expect(deleteSessionsForAccount).not.toHaveBeenCalled();
+  });
+
   it("coalesces concurrent refreshes for the same account", async () => {
     let resolveRefresh!: (response: Response) => void;
     const refresh = new Promise<Response>((resolve) => {

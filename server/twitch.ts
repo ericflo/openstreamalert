@@ -108,11 +108,13 @@ async function ensureValidAccessToken(
     },
   );
   if (!response.ok) {
-    if (response.status === 400 || response.status === 401)
+    if (response.status === 400 || response.status === 401) {
       dependencies.deleteSessionsForAccount(accountId);
-    throw new AuthorizationExpiredError(
-      `Twitch authorization expired (${response.status})`,
-    );
+      throw new AuthorizationExpiredError(
+        `Twitch authorization expired (${response.status})`,
+      );
+    }
+    throw new Error(`Twitch token refresh failed (${response.status})`);
   }
   const refreshed = (await response.json()) as {
     access_token: string;
