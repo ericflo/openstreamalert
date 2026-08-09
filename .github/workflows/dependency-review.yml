@@ -12,6 +12,9 @@ concurrency:
 
 jobs:
   review:
+    # Dependency review uses GitHub code scanning/GHAS for private repositories.
+    # It activates automatically when the project becomes public.
+    if: github.event.repository.visibility == 'public'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
