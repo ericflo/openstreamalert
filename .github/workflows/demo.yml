@@ -26,9 +26,21 @@ jobs:
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
         run: npm run build:demo
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v4
+      # actions/upload-pages-artifact currently invokes an unpinned nested
+      # action. Archive explicitly so repository-wide SHA pinning can stay on.
+      - name: Archive the Pages site
+        run: |
+          tar --dereference --hard-dereference \
+            --directory dist/client \
+            --create --verbose --file "$RUNNER_TEMP/artifact.tar" \
+            --exclude=.git --exclude=.github .
+      - name: Upload the Pages artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          path: dist/client
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
 
   deploy:
     if: github.event.repository.visibility == 'public'
