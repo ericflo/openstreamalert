@@ -139,6 +139,9 @@ requires a real developer application and account. The live OAuth â†’ EventSub â
 OBS acceptance checklist must pass before any release is tagged; see
 [Releasing](docs/RELEASING.md).
 
+CodeQL is prepared and activates when the repository becomes public; GitHub does
+not provide code-scanning uploads for this private repository without GHAS.
+
 The next priorities are packaged desktop/local setup, third-party emote adapters
 (7TV, BTTV, FFZ), multiple simultaneous scene profiles, and richer operator
 diagnostics.
