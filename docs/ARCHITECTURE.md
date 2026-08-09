@@ -49,5 +49,6 @@ give each account a single leased chat worker backed by pub/sub.
 
 OBS 31's Chromium 127 is the browser baseline. The overlay avoids recent-only
 APIs, bounds DOM history to 100 messages, has no audio, and explicitly resets
-the document to a transparent fixed viewport. Actual OBS smoke tests remain a
+the document to a transparent fixed viewport. The demo route has passed an
+actual OBS 32.1.2 Browser Source smoke test; live Twitch/OBS acceptance remains a
 release requirement because off-screen CEF lifecycle differs from desktop Chrome.

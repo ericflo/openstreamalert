@@ -4,6 +4,11 @@ OpenStreamAlert is pre-release software. A green CI run proves the deterministic
 demo and container paths; it does not replace a live Twitch and OBS acceptance
 test. Do not tag a release until every required item below is complete.
 
+The demo Browser Source path was smoke-tested on 2026-08-09 with OBS 32.1.2 on
+Linux/Wayland at 500×700. OBS loaded the production build through `obs-browser`,
+rendered the overlay, and produced a 500×700 true-alpha screenshot. This proves
+the local CEF rendering path only; it does not satisfy the live Twitch gate.
+
 ## Prepare
 
 - Choose the semantic version and create a short-lived release branch.
