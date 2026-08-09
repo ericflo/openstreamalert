@@ -63,9 +63,10 @@ release even when CI is green.
 
 - Merge only after required CI and security checks pass on the exact commit.
 - Create an annotated, signed `vX.Y.Z` tag and a GitHub release from that commit.
-- Build immutable container tags for `vX.Y.Z` and the commit SHA. Include OCI
-  version/revision metadata, a digest, SBOM, provenance, and checksums in the
-  release notes; never rely only on `latest`.
+- Push the signed tag. The release workflow verifies it matches `package.json`,
+  builds immutable version and commit-SHA GHCR tags for amd64/arm64, attaches OCI
+  metadata, SBOM and provenance, scans the published digest, and creates the
+  GitHub release with that digest. It intentionally publishes no `latest` tag.
 - Re-run the clean-install and container readiness smoke against published
   artifacts, verify documentation links, and confirm the release is readable
   without maintainer-only permissions.
