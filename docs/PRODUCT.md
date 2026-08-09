@@ -56,4 +56,3 @@ be excellent before the product expands.
   interruption without user action.
 - Empty, loading, offline, and authentication-expired states are understandable.
 - The default overlay remains readable at 320 px wide over bright and dark video.
-

@@ -46,4 +46,3 @@ OBS refresh without producing a new URL.
 Demo mode has no Twitch or database dependency beyond local startup. It uses
 representative fixture messages, making visual work, screenshots, tests, and a
 first evaluation possible before an operator registers a Twitch application.
-

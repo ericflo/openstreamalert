@@ -11,4 +11,3 @@ TLS at a trusted reverse proxy; and keeping dependencies current.
 The overlay key grants read-only access to a rendered view of public chat. If it
 is shared accidentally, rotate it in the studio. Rotation invalidates the old
 URL immediately.
-
