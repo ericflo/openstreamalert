@@ -13,15 +13,16 @@ releases exist, this table will identify the supported lines explicitly.
 
 ## Reporting a vulnerability
 
-Use the repository's **Security → Report a vulnerability** button to open a
-[private security advisory](https://github.com/ericflo/openstreamalert/security/advisories/new).
-Do not open a public issue, paste credentials, or include a live overlay URL.
+When GitHub displays **Security → Report a vulnerability**, use it to open a
+private security advisory. GitHub does not currently expose that feature on this
+private repository plan. Until it is available, request a private contact
+channel through the maintainer's GitHub profile or open an issue containing no
+vulnerability details. Never paste credentials or include a live overlay URL.
 
 Include the affected commit, impact, smallest reproduction, and any suggested
 mitigation. You should receive an acknowledgement within three business days.
 The maintainer will coordinate validation, a fix, disclosure timing, and credit
-with you. If private advisories are unavailable, open a public issue containing
-no vulnerability details and ask the maintainer for a private reporting channel.
+with you.
 
 ## Operator responsibilities
 
