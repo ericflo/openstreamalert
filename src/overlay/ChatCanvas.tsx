@@ -36,6 +36,11 @@ function Message({
       )}
       <div className="message-line">
         {settings.showTimestamps && <time>{time}</time>}
+        {settings.showFirstMessage && message.firstMessage && (
+          <span className="first-message" title="First message in this chat">
+            first
+          </span>
+        )}
         {settings.showBadges &&
           message.badges.map((badge) =>
             badge.imageUrl ? (
@@ -70,6 +75,14 @@ function Message({
                 alt={fragment.text}
                 key={index}
               />
+            ) : fragment.type === "cheermote" ? (
+              <span
+                className="cheermote"
+                title={`${fragment.bits} Bits`}
+                key={index}
+              >
+                {fragment.text}
+              </span>
             ) : (
               <span
                 className={fragment.type === "mention" ? "mention" : undefined}
@@ -88,11 +101,14 @@ function Message({
 export function ChatCanvas({
   settings,
   messages,
-  status = "connected",
+  status = { state: "connected" },
 }: {
   settings: OverlaySettings;
   messages: ChatMessage[];
-  status?: string;
+  status?: {
+    state: "connecting" | "connected" | "reconnecting" | "error";
+    detail?: string;
+  };
 }) {
   const style = {
     "--font-size": `${settings.fontSize}px`,
@@ -110,8 +126,13 @@ export function ChatCanvas({
           <Message message={message} settings={settings} key={message.id} />
         ))}
       </div>
-      {status === "error" && (
-        <div className="overlay-status">Chat is reconnecting…</div>
+      {(status.state === "error" || status.state === "reconnecting") && (
+        <div className={`overlay-status ${status.state}`} role="status">
+          {status.detail ??
+            (status.state === "error"
+              ? "Chat connection needs attention"
+              : "Chat is reconnecting…")}
+        </div>
       )}
     </main>
   );

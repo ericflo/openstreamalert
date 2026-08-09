@@ -3,13 +3,23 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { config, randomToken } from "./config.js";
 import { decrypt, encrypt, hashToken } from "./crypto.js";
-import { defaultSettings, type OverlaySettings } from "../shared/settings.js";
+import {
+  defaultSettings,
+  parseSettings,
+  type OverlaySettings,
+} from "../shared/settings.js";
 
 fs.mkdirSync(path.dirname(config.databasePath), { recursive: true });
+fs.chmodSync(path.dirname(config.databasePath), 0o700);
 const db = new Database(config.databasePath);
+fs.chmodSync(config.databasePath, 0o600);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
-db.exec(`
+for (const suffix of ["-wal", "-shm"]) {
+  const file = `${config.databasePath}${suffix}`;
+  if (fs.existsSync(file)) fs.chmodSync(file, 0o600);
+}
+const INITIAL_SCHEMA = `
   CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     login TEXT NOT NULL,
@@ -29,22 +39,53 @@ db.exec(`
     account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
     overlay_key TEXT UNIQUE NOT NULL,
     settings TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
     updated_at INTEGER NOT NULL
   );
-`);
-const accountColumns = db.pragma("table_info(accounts)") as Array<{
-  name: string;
-}>;
-if (!accountColumns.some((column) => column.name === "validated_at")) {
-  db.exec(
-    "ALTER TABLE accounts ADD COLUMN validated_at INTEGER NOT NULL DEFAULT 0",
-  );
+`;
+
+export function migrateDatabase(target: Database.Database) {
+  const migrate = target.transaction(() => {
+    const version = target.pragma("user_version", { simple: true }) as number;
+    if (version < 1) {
+      target.exec(INITIAL_SCHEMA);
+      const accountColumns = target.pragma("table_info(accounts)") as Array<{
+        name: string;
+      }>;
+      if (!accountColumns.some((column) => column.name === "validated_at"))
+        target.exec(
+          "ALTER TABLE accounts ADD COLUMN validated_at INTEGER NOT NULL DEFAULT 0",
+        );
+      target.pragma("user_version = 1");
+    }
+    if (version < 2) {
+      const overlayColumns = target.pragma("table_info(overlays)") as Array<{
+        name: string;
+      }>;
+      if (!overlayColumns.some((column) => column.name === "enabled"))
+        target.exec(
+          "ALTER TABLE overlays ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1",
+        );
+      target.pragma("user_version = 2");
+    }
+  });
+  migrate();
 }
+
+migrateDatabase(db);
 
 export interface Account {
   id: string;
   login: string;
   displayName: string;
+}
+
+function decodeSettings(value: string) {
+  try {
+    return parseSettings(JSON.parse(value));
+  } catch {
+    return defaultSettings;
+  }
 }
 
 export function saveAccount(
@@ -96,9 +137,24 @@ export function getAccountBySession(token?: string): Account | undefined {
   return row && { id: row.id, login: row.login, displayName: row.display_name };
 }
 
+export function accountCanConnect(id: string, login: string) {
+  const existing = db.prepare("SELECT 1 FROM accounts WHERE id=?").get(id);
+  if (existing) return true;
+  if (config.allowedTwitchUsers.length)
+    return config.allowedTwitchUsers.includes(login.toLowerCase());
+  const row = db.prepare("SELECT COUNT(*) AS count FROM accounts").get() as {
+    count: number;
+  };
+  return !config.production && row.count === 0;
+}
+
 export function deleteSession(token?: string) {
   if (token)
     db.prepare("DELETE FROM sessions WHERE token_hash=?").run(hashToken(token));
+}
+
+export function deleteSessionsForAccount(accountId: string) {
+  db.prepare("DELETE FROM sessions WHERE account_id=?").run(accountId);
 }
 
 export function getTokens(accountId: string) {
@@ -151,12 +207,16 @@ export function markTokenValidated(accountId: string) {
 
 export function getOverlayForAccount(accountId: string) {
   const row = db
-    .prepare("SELECT overlay_key, settings FROM overlays WHERE account_id=?")
-    .get(accountId) as { overlay_key: string; settings: string } | undefined;
+    .prepare(
+      "SELECT overlay_key, settings, enabled FROM overlays WHERE account_id=?",
+    )
+    .get(accountId) as
+    { overlay_key: string; settings: string; enabled: number } | undefined;
   return (
     row && {
       key: row.overlay_key,
-      settings: JSON.parse(row.settings) as OverlaySettings,
+      settings: decodeSettings(row.settings),
+      enabled: Boolean(row.enabled),
     }
   );
 }
@@ -165,7 +225,7 @@ export function getOverlayByKey(key: string) {
   const row = db
     .prepare(
       `SELECT o.account_id, o.settings, a.display_name FROM overlays o
-    JOIN accounts a ON a.id=o.account_id WHERE o.overlay_key=?`,
+    JOIN accounts a ON a.id=o.account_id WHERE o.overlay_key=? AND o.enabled=1`,
     )
     .get(key) as
     { account_id: string; settings: string; display_name: string } | undefined;
@@ -173,7 +233,7 @@ export function getOverlayByKey(key: string) {
     row && {
       accountId: row.account_id,
       channelName: row.display_name,
-      settings: JSON.parse(row.settings) as OverlaySettings,
+      settings: decodeSettings(row.settings),
     }
   );
 }
@@ -185,13 +245,35 @@ export function saveSettings(accountId: string, settings: OverlaySettings) {
 }
 
 export function rotateOverlayKey(accountId: string) {
+  const previous = getOverlayForAccount(accountId)?.key;
   const next = randomToken();
   db.prepare(
     "UPDATE overlays SET overlay_key=?, updated_at=? WHERE account_id=?",
   ).run(next, Date.now(), accountId);
-  return next;
+  return { next, previous };
+}
+
+export function setOverlayEnabled(accountId: string, enabled: boolean) {
+  db.prepare(
+    "UPDATE overlays SET enabled=?, updated_at=? WHERE account_id=?",
+  ).run(enabled ? 1 : 0, Date.now(), accountId);
+  return getOverlayForAccount(accountId);
 }
 
 export function deleteAccount(accountId: string) {
   db.prepare("DELETE FROM accounts WHERE id=?").run(accountId);
+}
+
+export function databaseReady() {
+  try {
+    const result = db.pragma("quick_check", { simple: true });
+    return result === "ok";
+  } catch {
+    return false;
+  }
+}
+
+export function cleanupExpiredSessions() {
+  return db.prepare("DELETE FROM sessions WHERE expires_at<=?").run(Date.now())
+    .changes;
 }

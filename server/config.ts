@@ -19,7 +19,37 @@ export const config = {
   encryptionKey: process.env.ENCRYPTION_KEY ?? "",
   production: process.env.NODE_ENV === "production",
   sessionDays: 30,
+  allowedTwitchUsers: (process.env.TWITCH_ALLOWED_USERS ?? "")
+    .split(",")
+    .map((login) => login.trim().toLowerCase())
+    .filter(Boolean),
+  buildVersion: process.env.BUILD_VERSION ?? "development",
 };
+
+if (!Number.isInteger(port) || port < 1 || port > 65_535)
+  throw new Error("PORT must be an integer between 1 and 65535");
+try {
+  new URL(appUrl);
+} catch {
+  throw new Error("APP_URL must be an absolute http:// or https:// URL");
+}
+const twitchParts = [
+  config.twitchClientId,
+  config.twitchClientSecret,
+  config.encryptionKey,
+];
+if (twitchParts.some(Boolean) && !twitchParts.every(Boolean))
+  throw new Error(
+    "TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, and ENCRYPTION_KEY must be configured together",
+  );
+if (twitchParts.every(Boolean)) {
+  if (Buffer.from(config.encryptionKey, "base64").length !== 32)
+    throw new Error("ENCRYPTION_KEY must be 32 bytes encoded as base64");
+  if (config.production && config.allowedTwitchUsers.length === 0)
+    throw new Error(
+      "TWITCH_ALLOWED_USERS is required for a configured production deployment",
+    );
+}
 
 export function twitchIsConfigured() {
   return Boolean(

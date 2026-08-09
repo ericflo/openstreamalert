@@ -16,6 +16,10 @@ export const overlaySettingsSchema = z.object({
   showReplies: z.boolean(),
   readableColors: z.boolean(),
   hideCommands: z.boolean(),
+  showNotices: z.boolean(),
+  showFirstMessage: z.boolean(),
+  blockedUsers: z.array(z.string().trim().min(1).max(50)).max(50),
+  blockedWords: z.array(z.string().trim().min(1).max(80)).max(50),
 });
 
 export type OverlaySettings = z.infer<typeof overlaySettingsSchema>;
@@ -36,4 +40,17 @@ export const defaultSettings: OverlaySettings = {
   showReplies: true,
   readableColors: true,
   hideCommands: true,
+  showNotices: true,
+  showFirstMessage: true,
+  blockedUsers: [],
+  blockedWords: [],
 };
+
+export function parseSettings(value: unknown): OverlaySettings {
+  const candidate =
+    value && typeof value === "object"
+      ? { ...defaultSettings, ...(value as Record<string, unknown>) }
+      : defaultSettings;
+  const parsed = overlaySettingsSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : defaultSettings;
+}

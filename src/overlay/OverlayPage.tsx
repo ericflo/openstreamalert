@@ -1,27 +1,42 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMessage, OverlayEvent } from "../../shared/events";
-import { defaultSettings, type OverlaySettings } from "../../shared/settings";
+import {
+  defaultSettings,
+  parseSettings,
+  type OverlaySettings,
+} from "../../shared/settings";
 import { ChatCanvas } from "./ChatCanvas";
+import { decodeSettings } from "./config-url";
 import { demoMessages } from "./demo";
+import { reduceOverlayEvent } from "./feed";
+
+type FeedStatus = {
+  state: "connecting" | "connected" | "reconnecting" | "error";
+  detail?: string;
+};
 
 export function OverlayPage() {
   const key = window.location.pathname.split("/").filter(Boolean)[1] ?? "";
   const query = new URLSearchParams(window.location.search);
   const demo = key === "demo" || query.has("demo");
   const requestedPreset = query.get("preset");
+  const encodedSettings = decodeSettings(query.get("config"));
   const demoPreset = ["minimal", "glass", "bubble", "terminal"].includes(
     requestedPreset ?? "",
   )
     ? (requestedPreset as OverlaySettings["preset"])
     : defaultSettings.preset;
-  const [settings, setSettings] = useState<OverlaySettings>({
-    ...defaultSettings,
-    preset: demoPreset,
-  });
+  const [settings, setSettings] = useState<OverlaySettings>(
+    encodedSettings ?? { ...defaultSettings, preset: demoPreset },
+  );
   const [messages, setMessages] = useState<ChatMessage[]>(
     demo ? demoMessages : [],
   );
-  const [status, setStatus] = useState("connecting");
+  const [status, setStatus] = useState<FeedStatus>(
+    demo
+      ? { state: "connected", detail: "Demo data" }
+      : { state: "connecting" },
+  );
   const settingsRef = useRef(settings);
   useEffect(() => {
     settingsRef.current = settings;
@@ -29,58 +44,68 @@ export function OverlayPage() {
 
   const applyEvent = useCallback((event: OverlayEvent) => {
     if (event.kind === "state") {
-      setStatus(event.state);
+      setStatus({ state: event.state, detail: event.detail });
       return;
     }
-    setMessages((current) => {
-      if (event.kind === "clear") return [];
-      if (event.kind === "delete")
-        return current.filter((item) => item.id !== event.messageId);
-      if (event.kind === "clear-user")
-        return current.filter((item) => item.userId !== event.userId);
-      const next =
-        event.kind === "notice"
-          ? {
-              kind: "message" as const,
-              id: event.id,
-              userId: "twitch",
-              userName: "Twitch",
-              userColor: settingsRef.current.accent,
-              badges: [],
-              fragments: [{ type: "text" as const, text: event.text }],
-              text: event.text,
-              sentAt: event.sentAt,
-              action: true,
-            }
-          : event.kind === "message"
-            ? event
-            : undefined;
-      if (
-        !next ||
-        (settingsRef.current.hideCommands && next.text.startsWith("!"))
-      )
-        return current;
-      return [...current, next].slice(-settingsRef.current.maxMessages);
-    });
+    if (event.kind === "settings") {
+      const next = parseSettings(event.settings);
+      settingsRef.current = next;
+      setSettings(next);
+      return;
+    }
+    setMessages((current) =>
+      reduceOverlayEvent(current, event, settingsRef.current),
+    );
+    setStatus((current) =>
+      current.state === "error" ? { state: "connected" } : current,
+    );
   }, []);
 
   useEffect(() => {
     if (demo) return;
+    const abort = new AbortController();
     let source: EventSource | undefined;
-    void fetch(`/api/overlay/${encodeURIComponent(key)}`)
+    void fetch(`/api/overlay/${encodeURIComponent(key)}`, {
+      signal: abort.signal,
+    })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Overlay not found");
+        if (!response.ok)
+          throw new Error(
+            response.status === 404
+              ? "This overlay URL is invalid or has been rotated."
+              : "The overlay could not be loaded.",
+          );
         const data = (await response.json()) as { settings: OverlaySettings };
-        setSettings(data.settings);
+        if (abort.signal.aborted) return;
+        setSettings(parseSettings(data.settings));
         source = new EventSource(
           `/api/overlay/${encodeURIComponent(key)}/events`,
         );
-        source.onmessage = (message) =>
-          applyEvent(JSON.parse(message.data) as OverlayEvent);
-        source.onerror = () => setStatus("error");
+        source.onopen = () => setStatus({ state: "connecting" });
+        source.onmessage = (message) => {
+          try {
+            applyEvent(JSON.parse(message.data) as OverlayEvent);
+          } catch {
+            setStatus({ state: "error", detail: "Invalid overlay event" });
+          }
+        };
+        source.onerror = () =>
+          setStatus({
+            state: "reconnecting",
+            detail: "The overlay stream was interrupted. Retrying…",
+          });
       })
-      .catch(() => setStatus("error"));
-    return () => source?.close();
+      .catch((error: unknown) => {
+        if (abort.signal.aborted) return;
+        setStatus({
+          state: "error",
+          detail: error instanceof Error ? error.message : "Overlay not found",
+        });
+      });
+    return () => {
+      abort.abort();
+      source?.close();
+    };
   }, [applyEvent, demo, key]);
 
   useEffect(() => {
@@ -90,7 +115,7 @@ export function OverlayPage() {
       setMessages((current) =>
         current.filter((message) => Date.parse(message.sentAt) > cutoff),
       );
-    }, 1_000);
+    }, 500);
     return () => clearInterval(timer);
   }, [settings.messageLifetime, demo]);
 

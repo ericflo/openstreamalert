@@ -1,26 +1,74 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatMessage } from "../../shared/events";
-import { defaultSettings, type OverlaySettings } from "../../shared/settings";
+import type { ChatMessage, OverlayEvent } from "../../shared/events";
+import {
+  defaultSettings,
+  overlaySettingsSchema,
+  parseSettings,
+  type OverlaySettings,
+} from "../../shared/settings";
 import { Brand } from "../components/Brand";
 import { ChatCanvas } from "../overlay/ChatCanvas";
+import { encodeSettings } from "../overlay/config-url";
 import { demoMessages, makeDemoMessage } from "../overlay/demo";
+import { reduceOverlayEvent } from "../overlay/feed";
+
+type FeedStatus = {
+  state: "idle" | "connecting" | "connected" | "reconnecting" | "error";
+  detail?: string;
+  viewers?: number;
+  lastEventAt?: string | null;
+};
 
 interface Status {
   configured: boolean;
   account: { id: string; login: string; displayName: string } | null;
-  overlay: { settings: OverlaySettings; url: string } | null;
+  overlay: { settings: OverlaySettings; url: string; enabled: boolean } | null;
+  connection: FeedStatus | null;
+  version: string;
 }
 
 const presets: Array<{
   id: OverlaySettings["preset"];
   name: string;
   description: string;
+  values: Partial<OverlaySettings>;
 }> = [
-  { id: "minimal", name: "Minimal", description: "Bare, bright, focused" },
-  { id: "glass", name: "Glass", description: "Soft depth, our signature" },
-  { id: "bubble", name: "Bubble", description: "Playful conversation" },
-  { id: "terminal", name: "Terminal", description: "Quietly technical" },
+  {
+    id: "minimal",
+    name: "Minimal",
+    description: "Bare, bright, focused",
+    values: { preset: "minimal", font: "sans", backgroundOpacity: 0 },
+  },
+  {
+    id: "glass",
+    name: "Glass",
+    description: "Soft depth, our signature",
+    values: { preset: "glass", font: "sans", backgroundOpacity: 0.72 },
+  },
+  {
+    id: "bubble",
+    name: "Bubble",
+    description: "Playful conversation",
+    values: { preset: "bubble", font: "rounded", backgroundOpacity: 0.82 },
+  },
+  {
+    id: "terminal",
+    name: "Terminal",
+    description: "Quietly technical",
+    values: { preset: "terminal", font: "mono", backgroundOpacity: 0.78 },
+  },
 ];
+
+const authErrors: Record<string, string> = {
+  "not-configured":
+    "This instance needs Twitch credentials before it can connect.",
+  "oauth-state":
+    "The Twitch sign-in expired or failed its security check. Try again.",
+  "oauth-failed":
+    "Twitch sign-in could not be completed. Check the server logs and retry.",
+  "not-allowed":
+    "This Twitch account is not allowed to use this private instance.",
+};
 
 function Toggle({
   checked,
@@ -39,103 +87,279 @@ function Toggle({
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
       />
-      <i />
+      <i aria-hidden="true" />
     </label>
   );
+}
+
+function listFromInput(value: string) {
+  return [
+    ...new Set(
+      value
+        .split(/[\n,]/)
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, 50);
 }
 
 export function Studio() {
   const [status, setStatus] = useState<Status | null>(null);
   const [settings, setSettings] = useState(defaultSettings);
   const [messages, setMessages] = useState<ChatMessage[]>(demoMessages);
+  const [feedStatus, setFeedStatus] = useState<FeedStatus>({ state: "idle" });
   const [saved, setSaved] = useState<"idle" | "saving" | "saved" | "error">(
     "idle",
   );
   const [copied, setCopied] = useState(false);
+  const [uiError, setUiError] = useState<string | null>(() => {
+    const code = new URLSearchParams(window.location.search).get("error");
+    return code
+      ? (authErrors[code] ?? "Something interrupted setup. Please retry.")
+      : null;
+  });
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const pendingSave = useRef<OverlaySettings | undefined>(undefined);
+  const saving = useRef(false);
+  const settingsRef = useRef(settings);
+  const importRef = useRef<HTMLInputElement>(null);
   const testIndex = useRef(0);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   useEffect(() => {
     void loadStatus();
   }, []);
+
+  useEffect(() => {
+    if (!status?.account) return;
+    const source = new EventSource("/api/studio/events");
+    source.onopen = () => setFeedStatus({ state: "connecting" });
+    source.onmessage = (message) => {
+      try {
+        const event = JSON.parse(message.data) as OverlayEvent;
+        if (event.kind === "state") {
+          setFeedStatus({ state: event.state, detail: event.detail });
+        } else if (event.kind !== "settings") {
+          setMessages((current) =>
+            reduceOverlayEvent(current, event, settingsRef.current),
+          );
+        }
+      } catch {
+        setFeedStatus({ state: "error", detail: "Invalid live preview event" });
+      }
+    };
+    source.onerror = () =>
+      setFeedStatus({
+        state: "reconnecting",
+        detail: "Live preview is reconnecting…",
+      });
+    return () => source.close();
+  }, [status?.account]);
+
   async function loadStatus() {
-    const response = await fetch("/api/status");
-    const data = (await response.json()) as Status;
-    setStatus(data);
-    if (data.overlay) setSettings(data.overlay.settings);
+    try {
+      const response = await fetch("/api/status");
+      if (!response.ok) throw new Error("The studio server is unavailable.");
+      const data = (await response.json()) as Status;
+      setStatus(data);
+      setFeedStatus(data.connection ?? { state: "idle" });
+      if (data.overlay) {
+        setSettings(parseSettings(data.overlay.settings));
+        if (data.account) setMessages([]);
+      }
+    } catch (error) {
+      setUiError(
+        error instanceof Error ? error.message : "The studio could not load.",
+      );
+    }
+  }
+
+  function applySettings(next: OverlaySettings, persist = true) {
+    setSettings(next);
+    settingsRef.current = next;
+    if (!persist || !status?.account) return;
+    pendingSave.current = next;
+    setSaved("saving");
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void flushSaves(), 300);
   }
 
   function update<K extends keyof OverlaySettings>(
     key: K,
     value: OverlaySettings[K],
   ) {
-    const next = { ...settings, [key]: value };
-    setSettings(next);
-    if (!status?.account) return;
-    setSaved("saving");
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      void fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(next),
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error();
-          setSaved("saved");
-          setTimeout(() => setSaved("idle"), 1800);
-        })
-        .catch(() => setSaved("error"));
-    }, 350);
+    applySettings({ ...settingsRef.current, [key]: value });
+  }
+
+  async function flushSaves() {
+    if (saving.current) return;
+    saving.current = true;
+    try {
+      while (pendingSave.current) {
+        const next = pendingSave.current;
+        pendingSave.current = undefined;
+        const response = await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(next),
+        });
+        if (!response.ok) throw new Error("Settings could not be saved");
+      }
+      setSaved("saved");
+      setTimeout(() => setSaved("idle"), 1800);
+    } catch (error) {
+      setSaved("error");
+      setUiError(
+        error instanceof Error ? error.message : "Settings could not be saved",
+      );
+    } finally {
+      saving.current = false;
+      if (pendingSave.current) void flushSaves();
+    }
   }
 
   function testMessage() {
     const event = makeDemoMessage(testIndex.current++);
     if (event.kind === "message")
       setMessages((current) =>
-        [...current, event].slice(-settings.maxMessages),
+        reduceOverlayEvent(current, event, settingsRef.current),
       );
   }
 
+  function overlayUrl() {
+    return (
+      status?.overlay?.url ??
+      `${window.location.origin}/overlay/demo?demo=1&config=${encodeSettings(settings)}`
+    );
+  }
+
   async function copyUrl() {
-    const url =
-      status?.overlay?.url ?? `${window.location.origin}/overlay/demo?demo=1`;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    try {
+      const value = overlayUrl();
+      if (navigator.clipboard?.writeText)
+        await navigator.clipboard.writeText(value);
+      else {
+        const input = document.createElement("textarea");
+        input.value = value;
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.append(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setUiError("The URL could not be copied. Select it manually instead.");
+    }
+  }
+
+  function exportSettings() {
+    const portable = { version: 1, settings };
+    const blob = new Blob([`${JSON.stringify(portable, null, 2)}\n`], {
+      type: "application/json",
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `openstreamalert-${settings.preset}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  async function importSettings(file?: File) {
+    if (!file) return;
+    try {
+      const candidate = JSON.parse(await file.text());
+      const values =
+        candidate &&
+        typeof candidate === "object" &&
+        "settings" in candidate &&
+        (candidate as { version?: unknown }).version === 1
+          ? (candidate as { settings: unknown }).settings
+          : candidate;
+      const parsed = overlaySettingsSchema.safeParse({
+        ...defaultSettings,
+        ...(values && typeof values === "object" ? values : {}),
+      });
+      if (!parsed.success)
+        throw new Error(
+          "That file is not a valid OpenStreamAlert configuration.",
+        );
+      applySettings(parsed.data);
+    } catch (error) {
+      setUiError(
+        error instanceof Error ? error.message : "Configuration import failed.",
+      );
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
   }
 
   async function rotateUrl() {
     if (
       !confirm(
-        "Rotate the overlay URL? The current URL will stop working immediately.",
+        "Rotate the overlay URL? The current URL and every open copy will stop immediately.",
       )
     )
       return;
     const response = await fetch("/api/overlay-key/rotate", { method: "POST" });
+    if (!response.ok)
+      return setUiError("The private URL could not be rotated.");
     const data = (await response.json()) as { url: string };
     setStatus((current) =>
-      current && current.overlay
+      current?.overlay
         ? { ...current, overlay: { ...current.overlay, url: data.url } }
         : current,
     );
   }
 
+  async function toggleOverlay() {
+    if (!status?.overlay) return;
+    const enabled = !status.overlay.enabled;
+    const response = await fetch("/api/overlay/enabled", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!response.ok)
+      return setUiError("The overlay privacy control could not be updated.");
+    setStatus((current) =>
+      current?.overlay
+        ? { ...current, overlay: { ...current.overlay, enabled } }
+        : current,
+    );
+  }
+
   async function logout() {
-    await fetch("/api/logout", { method: "POST" });
+    const response = await fetch("/api/logout", { method: "POST" });
+    if (!response.ok) return setUiError("Sign out failed.");
+    setMessages(demoMessages);
     await loadStatus();
   }
 
   async function deleteData() {
     if (
       !confirm(
-        "Delete your OpenStreamAlert data and revoke Twitch access? This cannot be undone.",
+        "Delete your data and revoke Twitch access? This cannot be undone.",
       )
     )
       return;
-    await fetch("/api/account", { method: "DELETE" });
+    const response = await fetch("/api/account", { method: "DELETE" });
+    if (!response.ok) return setUiError("Account deletion failed.");
+    setMessages(demoMessages);
     await loadStatus();
   }
+
+  const connected = feedStatus.state === "connected";
+  const previewStatus = {
+    state:
+      feedStatus.state === "idle" ? ("connected" as const) : feedStatus.state,
+    detail: feedStatus.detail,
+  };
 
   return (
     <div className="studio-shell">
@@ -158,6 +382,17 @@ export function Studio() {
       </header>
 
       <main className="studio">
+        {uiError && (
+          <div className="error-banner" role="alert">
+            <span>{uiError}</span>
+            {status?.configured && !connected && (
+              <a href="/api/auth/twitch">Reconnect Twitch</a>
+            )}
+            <button onClick={() => setUiError(null)} aria-label="Dismiss error">
+              ×
+            </button>
+          </div>
+        )}
         <section className="intro">
           <div>
             <span className="eyebrow">
@@ -182,10 +417,22 @@ export function Studio() {
                   {status.account.displayName.slice(0, 1).toUpperCase()}
                 </span>
                 <div>
-                  <small>Connected as</small>
+                  <small>
+                    {connected ? "Live Twitch connection" : "Twitch account"}
+                  </small>
                   <strong>{status.account.displayName}</strong>
                 </div>
-                <span className="connected-pill">Connected</span>
+                <span className={`connected-pill ${feedStatus.state}`}>
+                  {connected ? "Live" : feedStatus.state}
+                </span>
+                {!connected && (
+                  <a
+                    className="button compact secondary"
+                    href="/api/auth/twitch"
+                  >
+                    Reconnect
+                  </a>
+                )}
               </>
             ) : (
               <>
@@ -224,11 +471,15 @@ export function Studio() {
                 <span>01</span>
                 <h2>Choose a mood</h2>
               </div>
-              <span className={`save-state ${saved}`}>
+              <span
+                className={`save-state ${saved}`}
+                role="status"
+                aria-live="polite"
+              >
                 {saved === "saving"
                   ? "Saving…"
                   : saved === "saved"
-                    ? "Saved"
+                    ? "Saved live"
                     : saved === "error"
                       ? "Save failed"
                       : ""}
@@ -238,8 +489,11 @@ export function Studio() {
               {presets.map((preset) => (
                 <button
                   key={preset.id}
+                  aria-pressed={settings.preset === preset.id}
                   className={settings.preset === preset.id ? "selected" : ""}
-                  onClick={() => update("preset", preset.id)}
+                  onClick={() =>
+                    applySettings({ ...settingsRef.current, ...preset.values })
+                  }
                 >
                   <i className={`preset-swatch ${preset.id}`} />
                   <strong>{preset.name}</strong>
@@ -277,8 +531,9 @@ export function Studio() {
                 </span>
                 <input
                   type="range"
+                  aria-label="Text size"
                   min="12"
-                  max="36"
+                  max="48"
                   value={settings.fontSize}
                   onChange={(event) =>
                     update("fontSize", Number(event.target.value))
@@ -294,6 +549,7 @@ export function Studio() {
                 </span>
                 <input
                   type="range"
+                  aria-label="Panel opacity"
                   min="0"
                   max="1"
                   step="0.01"
@@ -336,8 +592,21 @@ export function Studio() {
                 >
                   Readable colors
                 </Toggle>
+                <Toggle
+                  checked={settings.showFirstMessage}
+                  onChange={(v) => update("showFirstMessage", v)}
+                >
+                  First-message tag
+                </Toggle>
+                <Toggle
+                  checked={settings.showNotices}
+                  onChange={(v) => update("showNotices", v)}
+                >
+                  Twitch notices
+                </Toggle>
               </div>
             </div>
+
             <div className="control-section">
               <div className="section-heading">
                 <div>
@@ -356,8 +625,9 @@ export function Studio() {
                 </span>
                 <input
                   type="range"
+                  aria-label="Message lifetime"
                   min="0"
-                  max="60"
+                  max="120"
                   step="2"
                   value={settings.messageLifetime}
                   onChange={(event) =>
@@ -371,8 +641,9 @@ export function Studio() {
                 </span>
                 <input
                   type="range"
+                  aria-label="Messages on screen"
                   min="3"
-                  max="50"
+                  max="100"
                   value={settings.maxMessages}
                   onChange={(event) =>
                     update("maxMessages", Number(event.target.value))
@@ -397,12 +668,14 @@ export function Studio() {
               </label>
               <div className="segmented" aria-label="Message alignment">
                 <button
+                  aria-pressed={settings.alignment === "left"}
                   className={settings.alignment === "left" ? "selected" : ""}
                   onClick={() => update("alignment", "left")}
                 >
                   Left aligned
                 </button>
                 <button
+                  aria-pressed={settings.alignment === "right"}
                   className={settings.alignment === "right" ? "selected" : ""}
                   onClick={() => update("alignment", "right")}
                 >
@@ -423,21 +696,72 @@ export function Studio() {
                   Hide commands
                 </Toggle>
               </div>
+              <label className="field">
+                <span>
+                  Hidden users <small>comma separated</small>
+                </span>
+                <input
+                  className="text-input"
+                  value={settings.blockedUsers.join(", ")}
+                  placeholder="nightbot, spam_account"
+                  onChange={(event) =>
+                    update("blockedUsers", listFromInput(event.target.value))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>
+                  Hidden words <small>matched as text</small>
+                </span>
+                <input
+                  className="text-input"
+                  value={settings.blockedWords.join(", ")}
+                  placeholder="spoiler, unwanted phrase"
+                  onChange={(event) =>
+                    update("blockedWords", listFromInput(event.target.value))
+                  }
+                />
+              </label>
+              <div className="portable-actions">
+                <button onClick={exportSettings}>Export JSON</button>
+                <button onClick={() => importRef.current?.click()}>
+                  Import JSON
+                </button>
+                <button onClick={() => applySettings(defaultSettings)}>
+                  Reset
+                </button>
+                <input
+                  ref={importRef}
+                  hidden
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={(event) =>
+                    void importSettings(event.target.files?.[0])
+                  }
+                />
+              </div>
             </div>
           </aside>
 
           <section className="preview-column">
             <div className="preview-toolbar">
               <div>
-                <span className="status-light" /> Live preview{" "}
-                <small>500 × 700</small>
+                <span className={`status-light ${feedStatus.state}`} />{" "}
+                {status?.account ? "Live Twitch preview" : "Interactive demo"}{" "}
+                <small>500 × 700 viewport</small>
               </div>
               <button onClick={testMessage}>+ Test message</button>
             </div>
             <div className="preview-stage">
-              <div className="preview-glow one" />
-              <div className="preview-glow two" />
-              <ChatCanvas settings={settings} messages={messages} />
+              <div className="preview-viewport">
+                <div className="preview-glow one" />
+                <div className="preview-glow two" />
+                <ChatCanvas
+                  settings={settings}
+                  messages={messages}
+                  status={previewStatus}
+                />
+              </div>
             </div>
             <div className="obs-card">
               <span className="step-number">04</span>
@@ -445,20 +769,23 @@ export function Studio() {
                 <h2>Add to OBS</h2>
                 <p>Sources → Browser · 500 × 700 · 30 FPS</p>
                 <div className="url-field">
-                  <code>
-                    {status?.overlay?.url ??
-                      `${window.location.origin}/overlay/demo?demo=1`}
-                  </code>
-                  <button onClick={copyUrl}>
+                  <code title={overlayUrl()}>{overlayUrl()}</code>
+                  <button onClick={copyUrl} aria-live="polite">
                     {copied ? "Copied!" : "Copy URL"}
                   </button>
                 </div>
                 <p className="obs-note">
-                  Keep “Shutdown source when not visible” and “Refresh browser
-                  when active” off. Your URL is a secret.
+                  Saved changes now update open Browser Sources live. Keep
+                  “Shutdown source when not visible” and “Refresh browser when
+                  active” off. Treat this URL as a secret.
                 </p>
                 {status?.account && (
                   <div className="account-actions">
+                    <button className="rotate-button" onClick={toggleOverlay}>
+                      {status.overlay?.enabled
+                        ? "Pause overlay"
+                        : "Resume overlay"}
+                    </button>
                     <button className="rotate-button" onClick={rotateUrl}>
                       Rotate private URL
                     </button>
@@ -477,7 +804,10 @@ export function Studio() {
       </main>
       <footer>
         <span>Open source, from first pixel to final frame.</span>
-        <span>Chat is shown live and never stored.</span>
+        <span>
+          Chat is shown live and never stored ·{" "}
+          {status?.version ?? "development"}
+        </span>
       </footer>
     </div>
   );

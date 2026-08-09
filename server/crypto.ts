@@ -14,8 +14,14 @@ function key(): Buffer {
 }
 
 export function encrypt(value: string): string {
+  return encryptWithKey(value, key());
+}
+
+export function encryptWithKey(value: string, encryptionKey: Buffer): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key(), iv);
+  if (encryptionKey.length !== 32)
+    throw new Error("Encryption key must be 32 bytes");
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv);
   const encrypted = Buffer.concat([
     cipher.update(value, "utf8"),
     cipher.final(),
@@ -26,11 +32,17 @@ export function encrypt(value: string): string {
 }
 
 export function decrypt(value: string): string {
+  return decryptWithKey(value, key());
+}
+
+export function decryptWithKey(value: string, encryptionKey: Buffer): string {
   const [iv, tag, encrypted] = value
     .split(".")
     .map((part) => Buffer.from(part, "base64url"));
   if (!iv || !tag || !encrypted) throw new Error("Invalid encrypted value");
-  const decipher = createDecipheriv("aes-256-gcm", key(), iv);
+  if (encryptionKey.length !== 32)
+    throw new Error("Encryption key must be 32 bytes");
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey, iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString(
     "utf8",

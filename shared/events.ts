@@ -20,14 +20,27 @@ export interface ChatMessage {
   sentAt: string;
   reply?: { userName: string; text: string };
   action: boolean;
+  firstMessage: boolean;
 }
 
 export type OverlayEvent =
   | ChatMessage
-  | { kind: "notice"; id: string; text: string; sentAt: string }
+  | {
+      kind: "notice";
+      id: string;
+      text: string;
+      sentAt: string;
+      noticeType?: string;
+      userId?: string;
+      userName?: string;
+      userColor?: string;
+      badges?: ChatMessage["badges"];
+      fragments?: ChatFragment[];
+    }
   | { kind: "delete"; messageId: string }
   | { kind: "clear-user"; userId: string }
   | { kind: "clear" }
+  | { kind: "settings"; settings: import("./settings.js").OverlaySettings }
   | {
       kind: "state";
       state: "connecting" | "connected" | "reconnecting" | "error";

@@ -12,6 +12,7 @@ export const demoMessages: ChatMessage[] = [
     fragments: [{ type: "text", text: "That lighting looks so good tonight" }],
     sentAt: new Date(Date.now() - 65_000).toISOString(),
     action: false,
+    firstMessage: false,
   },
   {
     kind: "message",
@@ -31,6 +32,7 @@ export const demoMessages: ChatMessage[] = [
       text: "That lighting looks so good tonight",
     },
     action: false,
+    firstMessage: false,
   },
   {
     kind: "message",
@@ -43,6 +45,7 @@ export const demoMessages: ChatMessage[] = [
     fragments: [{ type: "text", text: "first try. calling it now ✨" }],
     sentAt: new Date().toISOString(),
     action: false,
+    firstMessage: true,
   },
 ];
 
@@ -64,5 +67,6 @@ export function makeDemoMessage(index: number): OverlayEvent {
     text,
     sentAt: new Date().toISOString(),
     action: false,
+    firstMessage: false,
   };
 }
