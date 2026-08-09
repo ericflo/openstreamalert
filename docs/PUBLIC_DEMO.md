@@ -15,8 +15,10 @@ credential, or server-side overlay key.
 ## GitHub Pages deployment
 
 The `Public demo` workflow builds the studio with `VITE_PUBLIC_DEMO=1` and a
-repository-relative asset base. It is skipped while the repository is private.
-After making the repository public:
+repository-relative asset base. While the repository is private, it still builds
+and retains the exact Pages artifact, but the deployment job is skipped. This
+provides a credential-free packaging check before changing visibility. After
+making the repository public:
 
 1. In **Settings → Pages**, choose **GitHub Actions** as the source.
 2. Run the **Public demo** workflow once, or push to `main`.

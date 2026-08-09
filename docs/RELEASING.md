@@ -36,6 +36,12 @@ npm run test:e2e
 docker build --build-arg VERSION=vX.Y.Z --build-arg REVISION="$(git rev-parse HEAD)" -t openstreamalert:vX.Y.Z .
 ```
 
+Before creating a tag, manually run the **Release** workflow from `main`. Its
+read-only dry-run job performs the exact QEMU-backed amd64/arm64 OCI build and
+platform-specific Trivy gates, then skips every login, package, attestation, and
+release step. A dry run proves packaging feasibility without Twitch credentials
+or registry mutation; it does not waive the live acceptance gate.
+
 Boot the image with a temporary data volume, wait for `/readyz`, confirm its
 reported version, restart it, and verify that settings persisted. Test a backup
 and restore before a release containing a database change.
@@ -64,8 +70,10 @@ release even when CI is green.
 ## Publish and verify
 
 - Merge only after required CI and security checks pass on the exact commit.
-- Create an annotated, signed `vX.Y.Z` tag and a GitHub release from that commit.
+- Create an annotated, signed `vX.Y.Z` tag from that commit; let the workflow
+  create the GitHub release after every gate passes.
 - Push the signed tag. The release workflow verifies it matches `package.json`,
+  confirms the lockfile version and that the commit is on the default branch,
   asks GitHub to verify the annotated tag signature and exact target commit,
   builds a staged amd64/arm64 OCI layout, and scans both platforms before it can
   log in to GHCR. It then publishes immutable version and commit-SHA tags with
