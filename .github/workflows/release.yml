@@ -79,9 +79,120 @@ jobs:
               --input /work/openstreamalert-release
           done
 
+  windows:
+    runs-on: windows-latest
+    env:
+      TWITCH_DESKTOP_CLIENT_ID: ${{ vars.TWITCH_DESKTOP_CLIENT_ID }}
+      WINDOWS_SIGNER_SUBJECT: ${{ vars.WINDOWS_SIGNER_SUBJECT }}
+      WINDOWS_SIGNER_THUMBPRINT: ${{ vars.WINDOWS_SIGNER_THUMBPRINT }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Configure release signing
+        id: signing
+        if: github.event_name == 'push'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:TWITCH_DESKTOP_CLIENT_ID -or
+              -not $env:WINDOWS_CERTIFICATE_BASE64 -or
+              -not $env:WINDOWS_CERTIFICATE_PASSWORD -or
+              -not $env:WINDOWS_SIGNER_SUBJECT -or
+              -not $env:WINDOWS_SIGNER_THUMBPRINT) {
+            throw "The desktop client ID, signing secrets, and signer subject are required"
+          }
+          $certificate = Join-Path $env:RUNNER_TEMP "openstreamalert-release.pfx"
+          [IO.File]::WriteAllBytes(
+            $certificate,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
+          )
+          "certificate=$certificate" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Build unsigned Windows dry-run packages
+        if: github.event_name == 'workflow_dispatch'
+        run: npm run make:win
+      - name: Build signed Windows release packages
+        if: github.event_name == 'push'
+        env:
+          WINDOWS_CERTIFICATE_FILE: ${{ steps.signing.outputs.certificate }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: npm run make:win
+      - name: Verify Authenticode identity
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $packagedExecutable = Get-ChildItem out -Recurse -Filter OpenStreamAlert.exe |
+            Where-Object { $_.FullName -notmatch "[\\/]make[\\/]" } |
+            Select-Object -First 1 -ExpandProperty FullName
+          $targets = @(
+            $packagedExecutable,
+            "out/make/squirrel.windows/x64/OpenStreamAlert-Setup-x64.exe"
+          )
+          foreach ($target in $targets) {
+            $signature = Get-AuthenticodeSignature $target
+            if ($signature.Status -ne "Valid") {
+              throw "$target is not validly signed: $($signature.Status)"
+            }
+            if ($signature.SignerCertificate.Subject -notlike
+                "*$env:WINDOWS_SIGNER_SUBJECT*") {
+              throw "$target has an unexpected signer"
+            }
+            if ($signature.SignerCertificate.Thumbprint -ne
+                $env:WINDOWS_SIGNER_THUMBPRINT.ToUpperInvariant()) {
+              throw "$target has an unexpected signer thumbprint"
+            }
+            if (-not $signature.TimeStamperCertificate) {
+              throw "$target does not have a trusted timestamp"
+            }
+          }
+          $zip = Get-ChildItem out/make/zip/win32/x64 -Filter *.zip |
+            Select-Object -First 1
+          $zipDirectory = Join-Path $env:RUNNER_TEMP "signed-zip"
+          Expand-Archive $zip.FullName $zipDirectory
+          $zipExecutable = Get-ChildItem $zipDirectory -Recurse -Filter OpenStreamAlert.exe |
+            Select-Object -First 1
+          $zipSignature = Get-AuthenticodeSignature $zipExecutable.FullName
+          if ($zipSignature.Status -ne "Valid" -or
+              -not $zipSignature.TimeStamperCertificate -or
+              $zipSignature.SignerCertificate.Thumbprint -ne
+                $env:WINDOWS_SIGNER_THUMBPRINT.ToUpperInvariant() -or
+              $zipSignature.SignerCertificate.Subject -notlike
+                "*$env:WINDOWS_SIGNER_SUBJECT*") {
+            throw "The portable archive does not contain the expected signed executable"
+          }
+      - name: Write Windows checksums
+        shell: pwsh
+        run: |
+          $assets = Get-ChildItem out/make -Recurse -File |
+            Sort-Object FullName
+          $lines = foreach ($asset in $assets) {
+            $hash = (Get-FileHash $asset.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($asset.Name)"
+          }
+          $lines | Set-Content out/make/SHA256SUMS-windows.txt -Encoding ascii
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-release
+          path: |
+            out/make/squirrel.windows/x64/*
+            out/make/zip/win32/x64/*
+            out/make/SHA256SUMS-windows.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove signing material
+        if: github.event_name == 'push' && always()
+        shell: pwsh
+        run: Remove-Item "$env:RUNNER_TEMP/openstreamalert-release.pfx" -Force -ErrorAction SilentlyContinue
+
   publish:
     if: github.event_name == 'push'
-    needs: stage
+    needs: [stage, windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -90,6 +201,10 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: windows-release
+          path: windows-release
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
@@ -130,7 +245,9 @@ jobs:
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           RELEASE_TAG: ${{ needs.stage.outputs.version }}
         run: |
-          gh release create "$RELEASE_TAG" --verify-tag --generate-notes \
+          mapfile -d '' WINDOWS_ASSETS < <(find windows-release -type f -print0)
+          test "${#WINDOWS_ASSETS[@]}" -gt 0
+          gh release create "$RELEASE_TAG" "${WINDOWS_ASSETS[@]}" --verify-tag --generate-notes \
             --notes "Container: ghcr.io/${{ github.repository }}:$RELEASE_TAG
 
           Multi-platform digest: $IMAGE_DIGEST"

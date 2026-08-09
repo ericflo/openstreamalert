@@ -25,10 +25,7 @@ jobs:
       - name: Build the credential-free studio
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
-          VITE_PUBLIC_DEMO: "1"
-        run: |
-          npm run build
-          cp dist/client/index.html dist/client/404.html
+        run: npm run build:demo
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v4
         with:
           path: dist/client

@@ -81,6 +81,112 @@ jobs:
           echo "TWITCH_CLI_BIN=${install_dir}/twitch" >> "$GITHUB_ENV"
       - run: npm run test:twitch-cli
 
+  windows-desktop:
+    runs-on: windows-latest
+    env:
+      TWITCH_DESKTOP_CLIENT_ID: ${{ vars.TWITCH_DESKTOP_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run check
+      - run: npm test
+      - run: npm audit --audit-level=high
+      - run: npx playwright install chromium
+      - run: npm run build
+      - run: npm run test:e2e
+      - run: npm run test:demo
+      - name: Build the Windows installer and portable archive
+        run: npm run make:win
+      - name: Smoke-test the packaged desktop runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $executable = Get-ChildItem out -Recurse -Filter OpenStreamAlert.exe |
+            Where-Object { $_.FullName -notmatch "[\\/]make[\\/]" } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $executable) { throw "Packaged executable not found" }
+          $desktop = Start-Process $executable -PassThru
+          try {
+            $ready = $null
+            for ($attempt = 0; $attempt -lt 60; $attempt++) {
+              try {
+                $ready = Invoke-RestMethod "http://127.0.0.1:17071/readyz"
+                break
+              } catch {
+                if ($desktop.HasExited) {
+                  throw "Desktop process exited before readiness"
+                }
+                Start-Sleep -Seconds 1
+              }
+            }
+            if (-not $ready.ok -or -not $ready.database) {
+              throw "Packaged desktop never became ready"
+            }
+            $listeners = Get-NetTCPConnection -State Listen -LocalPort 17071
+            if ($listeners.LocalAddress -contains "0.0.0.0" -or
+                $listeners.LocalAddress -contains "::") {
+              throw "Desktop listener escaped loopback"
+            }
+            $second = Start-Process $executable -PassThru
+            if (-not $second.WaitForExit(15000) -or $second.ExitCode -ne 0) {
+              throw "Second launch did not hand off cleanly"
+            }
+            $securityConfig = Join-Path $env:APPDATA "OpenStreamAlert/desktop.json"
+            $database = Join-Path $env:APPDATA "OpenStreamAlert/data/openstreamalert.sqlite"
+            if (-not (Test-Path $securityConfig) -or -not (Test-Path $database)) {
+              throw "Desktop data was not created in the per-user directory"
+            }
+            $securityHash = (Get-FileHash $securityConfig -Algorithm SHA256).Hash
+
+            $quit = Start-Process $executable -ArgumentList "--quit" -PassThru
+            if (-not $quit.WaitForExit(15000) -or -not $desktop.WaitForExit(15000)) {
+              throw "Tray Quit did not stop the desktop process"
+            }
+            if (Get-NetTCPConnection -State Listen -LocalPort 17071 -ErrorAction SilentlyContinue) {
+              throw "Tray Quit did not release the loopback listener"
+            }
+
+            $desktop = Start-Process $executable -PassThru
+            $restarted = $false
+            for ($attempt = 0; $attempt -lt 60; $attempt++) {
+              try {
+                $ready = Invoke-RestMethod "http://127.0.0.1:17071/readyz"
+                $restarted = $ready.ok -and $ready.database
+                if ($restarted) { break }
+              } catch {
+                Start-Sleep -Seconds 1
+              }
+            }
+            if (-not $restarted) { throw "Desktop did not restart cleanly" }
+            if ((Get-FileHash $securityConfig -Algorithm SHA256).Hash -ne $securityHash) {
+              throw "The DPAPI-protected key changed across restart"
+            }
+            $finalQuit = Start-Process $executable -ArgumentList "--quit" -PassThru
+            if (-not $finalQuit.WaitForExit(15000) -or
+                -not $desktop.WaitForExit(15000)) {
+              throw "Final desktop Quit did not complete"
+            }
+          } finally {
+            Get-Process OpenStreamAlert -ErrorAction SilentlyContinue |
+              Stop-Process -Force
+          }
+      - name: Upload Windows package evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-desktop-${{ github.sha }}
+          path: |
+            out/make/squirrel.windows/x64/*
+            out/make/zip/win32/x64/*
+          if-no-files-found: error
+          retention-days: 14
+
   container:
     runs-on: ubuntu-latest
     steps:

@@ -22,8 +22,16 @@ export default tseslint.config(
     },
   },
   {
-    files: ["server/**/*.ts", "*.config.{js,ts}"],
+    files: [
+      "server/**/*.ts",
+      "desktop/**/*.ts",
+      "scripts/**/*.mjs",
+      "*.config.{js,cjs,ts}",
+    ],
     languageOptions: { globals: { ...globals.node } },
-    rules: { "@typescript-eslint/no-explicit-any": "off" },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-require-imports": "off",
+    },
   },
 );

@@ -10,8 +10,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command:
-      "VITE_PUBLIC_DEMO=1 VITE_BASE_PATH=/openstreamalert/ npm run build && cp dist/client/index.html dist/client/404.html && npx vite preview --outDir dist/client --base /openstreamalert/ --host 127.0.0.1 --port 4174 --strictPort",
+    command: "npm run preview:demo",
     url: "http://127.0.0.1:4174/openstreamalert/",
     reuseExistingServer: !process.env.CI,
   },

@@ -1,9 +1,11 @@
 {
   "name": "openstreamalert",
+  "productName": "OpenStreamAlert",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A beautiful, self-hosted Twitch chat overlay for OBS.",
+  "main": "dist/server/desktop/main.js",
+  "description": "Beautiful, private Twitch chat overlays for OBS.",
   "license": "MIT",
   "homepage": "https://github.com/ericflo/openstreamalert#readme",
   "repository": {
@@ -20,6 +22,8 @@
   "scripts": {
     "dev": "tsx watch server/index.ts",
     "build": "vite build && tsc -p tsconfig.server.json",
+    "build:demo": "node scripts/build-public-demo.mjs",
+    "build:desktop": "npm run build && node scripts/write-desktop-config.mjs",
     "start": "node dist/server/server/index.js",
     "check": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "lint": "eslint .",
@@ -29,12 +33,17 @@
     "test:e2e": "playwright test",
     "test:demo": "playwright test --config playwright.demo.config.ts",
     "test:twitch-cli": "vitest run --config vitest.twitch-cli.config.ts",
+    "desktop": "npm run build:desktop && electron-forge start",
+    "package:win": "npm run build:desktop && electron-forge package --platform win32 --arch x64",
+    "make:win": "npm run build:desktop && electron-forge make --platform win32 --arch x64",
+    "preview:demo": "node scripts/serve-public-demo.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "dotenv": "^17.2.3",
+    "electron-squirrel-startup": "1.0.1",
     "express": "^5.2.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -42,10 +51,17 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
+    "@electron-forge/cli": "7.11.2",
+    "@electron-forge/maker-squirrel": "7.11.2",
+    "@electron-forge/maker-zip": "7.11.2",
+    "@electron-forge/plugin-auto-unpack-natives": "7.11.2",
+    "@electron-forge/plugin-fuses": "7.11.2",
+    "@electron/fuses": "1.8.0",
+    "@electron/windows-sign": "2.0.6",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
-    "@vitest/coverage-v8": "^4.1.10",
     "@types/better-sqlite3": "^9.6.0",
+    "@types/electron-squirrel-startup": "^1.0.2",
     "@types/express": "^5.0.6",
     "@types/node": "^24.3.0",
     "@types/react": "^19.2.12",
@@ -53,6 +69,8 @@
     "@types/supertest": "^7.2.1",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "electron": "43.3.0",
     "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.3",
@@ -64,5 +82,12 @@
     "typescript-eslint": "^8.48.0",
     "vite": "^8.2.1",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "tar": "7.5.22",
+    "tmp": "0.2.7"
+  },
+  "config": {
+    "forge": "./forge.config.cjs"
   }
 }
