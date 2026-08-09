@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
+import { defaultSettings } from "../../shared/settings";
 
 async function openDemoStudio(page: Parameters<typeof test>[0]["page"]) {
   await page.goto("/");
@@ -248,4 +249,57 @@ test("overlay route is transparent and OBS-sized", async ({ page }) => {
     "src",
     /static-cdn\.jtvnw\.net/,
   );
+});
+
+test("default chat stays in bounds over bright and dark video at 320px", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  const config = Buffer.from(
+    JSON.stringify({ ...defaultSettings, messageLifetime: 0 }),
+  ).toString("base64url");
+  await page.goto(`/overlay/demo?demo=1&config=${config}`);
+  const messages = page.locator(".chat-message");
+  await expect(messages).toHaveCount(3);
+  await page.waitForTimeout(450);
+
+  for (const backdrop of [
+    { name: "bright", color: "rgb(250, 250, 250)" },
+    { name: "dark", color: "rgb(5, 7, 12)" },
+  ]) {
+    const renderedBackground = await page.evaluate((color) => {
+      document.documentElement.style.setProperty(
+        "background-color",
+        color,
+        "important",
+      );
+      document.body.style.setProperty("background-color", color, "important");
+      return getComputedStyle(document.body).backgroundColor;
+    }, backdrop.color);
+    expect(renderedBackground).toBe(backdrop.color);
+
+    const boxes = await messages.evaluateAll((elements) =>
+      elements.map((element) => {
+        const box = element.getBoundingClientRect();
+        return {
+          left: box.left,
+          top: box.top,
+          right: box.right,
+          bottom: box.bottom,
+        };
+      }),
+    );
+    expect(boxes).toHaveLength(3);
+    for (const box of boxes) {
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(320);
+      expect(box.bottom).toBeLessThanOrEqual(700);
+    }
+
+    await testInfo.attach(`320-${backdrop.name}-video`, {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
+  }
 });

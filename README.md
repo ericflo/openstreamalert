@@ -40,29 +40,40 @@ analytics, and does not put Twitch credentials in the OBS URL.
 
 ## Quick start
 
-You need [Node.js 24+](https://nodejs.org/). The credential-free design studio
-works immediately; live chat also needs a Twitch application. In the [Twitch
-developer console](https://dev.twitch.tv/console/apps), create an app with this
-OAuth redirect URL:
-
-```text
-http://localhost:5173/auth/callback
-```
-
-Then:
+You need [Node.js 24+](https://nodejs.org/). To try every design control with
+representative demo chat—without Twitch credentials or an `.env` file—run:
 
 ```bash
 git clone https://github.com/ericflo/openstreamalert.git
 cd openstreamalert
 npm ci
-cp .env.example .env
-openssl rand -base64 32  # paste this value into ENCRYPTION_KEY in .env
 npm run dev
 ```
 
-Add the Twitch client ID and secret to `.env`, open
-`http://localhost:5173`, and press **Connect**. Without credentials, the same
-command opens a complete demo studio.
+Open `http://localhost:5173`. The studio produces a self-contained demo Browser
+Source URL, so you can evaluate the complete design flow before connecting an
+account.
+
+### Connect live Twitch chat
+
+In the [Twitch developer console](https://dev.twitch.tv/console/apps), create an
+application with this exact OAuth redirect URL:
+
+```text
+http://localhost:5173/auth/callback
+```
+
+Then create the local configuration:
+
+```bash
+cp .env.example .env
+openssl rand -base64 32  # paste this value into ENCRYPTION_KEY in .env
+```
+
+Populate `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, and `ENCRYPTION_KEY`
+together; partial Twitch configuration is rejected to prevent an apparently
+configured but unusable instance. Restart `npm run dev`, open the studio, and
+press **Connect**.
 
 ### Add it to OBS
 
