@@ -9,6 +9,11 @@ const appUrl = (process.env.APP_URL ?? `http://localhost:${port}`).replace(
   "",
 );
 const desktop = process.env.OPENSTREAMALERT_DESKTOP === "1";
+const databasePath = process.env.DATABASE_PATH
+  ? path.resolve(process.env.DATABASE_PATH)
+  : process.env.VITEST
+    ? ":memory:"
+    : path.resolve("./data/openstreamalert.sqlite");
 
 export function parseBindAddress(value: string | undefined) {
   const address = value?.trim() || "127.0.0.1";
@@ -28,9 +33,7 @@ export const config = {
     : process.env.NODE_ENV === "production"
       ? ("hosted" as const)
       : ("development" as const),
-  databasePath: path.resolve(
-    process.env.DATABASE_PATH ?? "./data/openstreamalert.sqlite",
-  ),
+  databasePath,
   twitchClientId: process.env.TWITCH_CLIENT_ID ?? "",
   twitchClientSecret: process.env.TWITCH_CLIENT_SECRET ?? "",
   encryptionKey: process.env.ENCRYPTION_KEY ?? "",

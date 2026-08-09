@@ -9,16 +9,20 @@ import {
   type OverlaySettings,
 } from "../shared/settings.js";
 
-fs.mkdirSync(path.dirname(config.databasePath), { recursive: true });
-if (process.platform !== "win32")
-  fs.chmodSync(path.dirname(config.databasePath), 0o700);
+const persistentDatabase = config.databasePath !== ":memory:";
+if (persistentDatabase) {
+  fs.mkdirSync(path.dirname(config.databasePath), { recursive: true });
+  if (process.platform !== "win32")
+    fs.chmodSync(path.dirname(config.databasePath), 0o700);
+}
 const db = new Database(config.databasePath);
-if (process.platform !== "win32") fs.chmodSync(config.databasePath, 0o600);
+if (persistentDatabase && process.platform !== "win32")
+  fs.chmodSync(config.databasePath, 0o600);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 for (const suffix of ["-wal", "-shm"]) {
   const file = `${config.databasePath}${suffix}`;
-  if (process.platform !== "win32" && fs.existsSync(file))
+  if (persistentDatabase && process.platform !== "win32" && fs.existsSync(file))
     fs.chmodSync(file, 0o600);
 }
 const INITIAL_SCHEMA = `

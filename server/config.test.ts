@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseBindAddress } from "./config";
+import { config, parseBindAddress } from "./config";
 
 describe("bind address configuration", () => {
+  it("isolates Vitest workers from the persistent application database", () => {
+    expect(config.databasePath).toBe(":memory:");
+  });
+
   it("defaults native processes to IPv4 loopback", () => {
     expect(parseBindAddress(undefined)).toBe("127.0.0.1");
     expect(parseBindAddress("")).toBe("127.0.0.1");
