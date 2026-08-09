@@ -1,7 +1,11 @@
 import { spawn } from "node:child_process";
 
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const build = spawn(npm, ["run", "build:demo"], { stdio: "inherit" });
+const npmCli = process.env.npm_execpath;
+if (!npmCli) throw new Error("Run the public demo through npm.");
+
+const build = spawn(process.execPath, [npmCli, "run", "build:demo"], {
+  stdio: "inherit",
+});
 build.once("exit", (code) => {
   if (code !== 0) process.exit(code ?? 1);
   const vite = spawn(
