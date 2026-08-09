@@ -30,7 +30,8 @@ COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 RUN mkdir -p /app/data && chown node:node /app/data \
-  && { [ ! -d /usr/local/lib/node_modules/npm ] || find /usr/local/lib/node_modules/npm -depth -delete; } \
+  && { [ ! -d /usr/local/lib/node_modules ] || find /usr/local/lib/node_modules -mindepth 1 -depth -delete; } \
+  && { [ ! -d /opt ] || find /opt -mindepth 1 -depth -delete; } \
   && find /usr/local/bin -maxdepth 1 -type l \( -name npm -o -name npx -o -name corepack -o -name yarn -o -name yarnpkg -o -name pnpm -o -name pnpx \) -delete
 USER node
 EXPOSE 5173

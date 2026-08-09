@@ -16,6 +16,8 @@ the local CEF rendering path only; it does not satisfy the live Twitch gate.
 - Move relevant entries in `CHANGELOG.md` from **Unreleased** into a dated
   version section and note any schema, configuration, or operator changes.
 - Review dependency alerts, CodeQL results, licenses, and the final image scan.
+  CodeQL and dependency review require a public repository or GHAS; while the
+  project is private, their intentionally skipped jobs are not release evidence.
 - Confirm the setup, privacy, security, troubleshooting, and upgrade guidance
   still describes the shipped behavior.
 
@@ -64,9 +66,12 @@ release even when CI is green.
 - Merge only after required CI and security checks pass on the exact commit.
 - Create an annotated, signed `vX.Y.Z` tag and a GitHub release from that commit.
 - Push the signed tag. The release workflow verifies it matches `package.json`,
-  builds immutable version and commit-SHA GHCR tags for amd64/arm64, attaches OCI
-  metadata, SBOM and provenance, scans the published digest, and creates the
-  GitHub release with that digest. It intentionally publishes no `latest` tag.
+  asks GitHub to verify the annotated tag signature and exact target commit,
+  builds a staged amd64/arm64 OCI layout, and scans both platforms before it can
+  log in to GHCR. It then publishes immutable version and commit-SHA tags with
+  OCI metadata, SBOM and provenance, verifies both platforms in the published
+  digest, and creates the GitHub release. It intentionally publishes no `latest`
+  tag.
 - Re-run the clean-install and container readiness smoke against published
   artifacts, verify documentation links, and confirm the release is readable
   without maintainer-only permissions.
