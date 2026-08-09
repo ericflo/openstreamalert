@@ -44,6 +44,16 @@ describe("HTTP application", () => {
     expect(response.headers["cache-control"]).toBe("no-store");
   });
 
+  it("rate-limits repeated requests before they can exhaust the service", async () => {
+    const app = await createApp({ serveClient: false, rateLimitMax: 2 });
+    await request(app).get("/api/status").expect(200);
+    await request(app).get("/api/status").expect(200);
+    const limited = await request(app).get("/api/status").expect(429, {
+      error: "Too many requests; try again shortly",
+    });
+    expect(limited.headers["ratelimit"]).toBeTruthy();
+  });
+
   it("binds the minimum-scope Twitch authorization request to its state cookie", async () => {
     const previous = {
       clientId: config.twitchClientId,

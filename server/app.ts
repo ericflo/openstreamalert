@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import express, { type Request, type Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import type { ChatMessage } from "../shared/events.js";
 import { overlaySettingsSchema } from "../shared/settings.js";
 import {
@@ -39,6 +40,7 @@ import { chats } from "./twitch.js";
 export interface AppOptions {
   serveClient?: boolean;
   twitchFetch?: typeof fetchWithTimeout;
+  rateLimitMax?: number;
 }
 
 export async function createApp(options: AppOptions = {}) {
@@ -72,6 +74,15 @@ export async function createApp(options: AppOptions = {}) {
     }
     next();
   });
+  app.use(
+    rateLimit({
+      windowMs: 60_000,
+      limit: options.rateLimitMax ?? 600,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+      message: { error: "Too many requests; try again shortly" },
+    }),
+  );
   app.use(express.json({ limit: "32kb" }));
   app.use(session);
 
