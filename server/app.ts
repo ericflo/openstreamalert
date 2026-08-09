@@ -28,7 +28,13 @@ import { fetchWithTimeout } from "./http.js";
 import { overlayStreams } from "./overlay-streams.js";
 import { chats } from "./twitch.js";
 
-export async function createApp(options: { serveClient?: boolean } = {}) {
+export interface AppOptions {
+  serveClient?: boolean;
+  twitchFetch?: typeof fetchWithTimeout;
+}
+
+export async function createApp(options: AppOptions = {}) {
+  const twitchFetch = options.twitchFetch ?? fetchWithTimeout;
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
@@ -113,17 +119,19 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
   });
 
   app.get("/auth/callback", async (request, response) => {
+    let issuedAccessToken: string | undefined;
     try {
+      const state = String(request.query.state ?? "");
+      if (!state || state !== cookies(request).osa_oauth_state)
+        return response.redirect("/?error=oauth-state");
       if (request.query.error === "access_denied") {
         clearCookie(response, "osa_oauth_state");
         return response.redirect("/?error=oauth-denied");
       }
       const code = String(request.query.code ?? "");
-      const state = String(request.query.state ?? "");
-      if (!code || !state || state !== cookies(request).osa_oauth_state)
-        return response.redirect("/?error=oauth-state");
+      if (!code) return response.redirect("/?error=oauth-state");
       clearCookie(response, "osa_oauth_state");
-      const tokenResponse = await fetchWithTimeout(
+      const tokenResponse = await twitchFetch(
         "https://id.twitch.tv/oauth2/token",
         {
           method: "POST",
@@ -143,7 +151,8 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
         refresh_token: string;
         expires_in: number;
       };
-      const validationResponse = await fetchWithTimeout(
+      issuedAccessToken = token.access_token;
+      const validationResponse = await twitchFetch(
         "https://id.twitch.tv/oauth2/validate",
         { headers: { Authorization: `OAuth ${token.access_token}` } },
       );
@@ -156,10 +165,10 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
       if (user.client_id !== config.twitchClientId)
         throw new Error("client ID mismatch");
       if (!accountCanConnect(user.user_id, user.login)) {
-        await revokeToken(token.access_token);
+        await revokeToken(token.access_token, twitchFetch);
         return response.redirect("/?error=not-allowed");
       }
-      const userResponse = await fetchWithTimeout(
+      const userResponse = await twitchFetch(
         `https://api.twitch.tv/helix/users?id=${encodeURIComponent(user.user_id)}`,
         {
           headers: {
@@ -181,6 +190,7 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
         refreshToken: token.refresh_token,
         expiresAt: Date.now() + token.expires_in * 1000,
       });
+      issuedAccessToken = undefined;
       // Replace any cached terminal authorization state from a prior grant.
       chats.stop(user.user_id);
       const sessionToken = createSession(
@@ -195,6 +205,7 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
       );
       response.redirect("/?connected=1");
     } catch (error) {
+      if (issuedAccessToken) await revokeToken(issuedAccessToken, twitchFetch);
       console.error(
         JSON.stringify({
           level: "error",
@@ -285,7 +296,7 @@ export async function createApp(options: { serveClient?: boolean } = {}) {
       const overlay = getOverlayForAccount(accountId);
       const tokens = getTokens(accountId);
       try {
-        if (tokens) await revokeToken(tokens.accessToken);
+        if (tokens) await revokeToken(tokens.accessToken, twitchFetch);
       } finally {
         if (overlay) overlayStreams.revoke(overlay.key);
         chats.stop(accountId);
@@ -419,8 +430,8 @@ function prepareSse(response: Response) {
   response.flushHeaders();
 }
 
-async function revokeToken(token: string) {
-  await fetchWithTimeout(
+async function revokeToken(token: string, twitchFetch = fetchWithTimeout) {
+  await twitchFetch(
     "https://id.twitch.tv/oauth2/revoke",
     {
       method: "POST",
