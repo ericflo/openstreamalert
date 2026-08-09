@@ -50,6 +50,8 @@ FFZ are roadmap items and currently remain plain chat text.
 
 ## Changes do not appear in OBS
 
-Saved settings apply on the next overlay load. Use OBS's **Refresh cache of
-current page** after the studio displays “Saved.” The overlay URL does not need
-to be recopied unless it was rotated.
+Saved settings should update an open overlay immediately after the studio shows
+“Saved live.” If they do not, confirm the overlay is online, verify that your
+reverse proxy does not buffer `text/event-stream`, and then use OBS's **Refresh
+cache of current page**. The URL does not need to be recopied unless it was
+rotated. A paused overlay intentionally returns 404 until it is resumed.

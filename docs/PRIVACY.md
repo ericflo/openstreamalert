@@ -21,9 +21,10 @@ small display event in memory, and travels to connected OBS pages over SSE.
 Browser sources keep only the currently visible bounded message list.
 
 The overlay URL is an access secret because it displays a channel's public chat.
-It contains no OAuth credential and can be rotated immediately. Choosing
-**Delete account data** revokes the current Twitch token on a best-effort basis
-and deletes the account, sessions, settings, and encrypted tokens from SQLite.
+It contains no OAuth credential, can be paused without changing it, and can be
+rotated immediately; either action closes existing streams. Choosing **Delete
+account data** revokes the current Twitch token on a best-effort basis and
+deletes the account, sessions, settings, and encrypted tokens from SQLite.
 
 Self-hosters control their own server logs and reverse proxy. Configure those
 systems not to retain full overlay paths, protect database backups and

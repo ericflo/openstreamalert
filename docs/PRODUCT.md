@@ -29,8 +29,9 @@ Connect Twitch, make it yours, copy one browser-source URL, and stream.
 - A revocable, secret overlay URL for OBS
 - Native Twitch emotes, badges, replies, actions, and message deletion/clear
 - Live preview with useful demo chat before Twitch is configured
-- Carefully designed presets plus typography, color, spacing, motion, message
-  lifetime, and alignment controls
+- Carefully designed presets plus typography, color, motion, message lifetime,
+  filtering, and alignment controls
+- Live settings updates, privacy pause/resume, and versioned config export/import
 - Responsive setup studio and transparent, fixed-viewport overlay route
 - Docker and local Node deployment
 - Tests, CI, security notes, contribution guidance, and architecture docs

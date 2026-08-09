@@ -1,10 +1,29 @@
 services:
   openstreamalert:
-    build: .
+    image: openstreamalert:${BUILD_VERSION:-development}
+    build:
+      context: .
+      args:
+        VERSION: ${BUILD_VERSION:-development}
+        REVISION: ${BUILD_REVISION:-unknown}
+        CREATED: ${BUILD_CREATED:-unknown}
     restart: unless-stopped
+    init: true
+    stop_grace_period: 15s
     ports:
-      - "5173:5173"
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-5173}:5173"
     env_file: .env
+    environment:
+      PORT: 5173
+      DATABASE_PATH: /app/data/openstreamalert.sqlite
+      BUILD_VERSION: ${BUILD_VERSION:-development}
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
     volumes:
       - openstreamalert-data:/app/data
 

@@ -20,9 +20,11 @@ openssl rand -base64 32
 ```
 
 Set `APP_URL` to the origin users will actually open, without a trailing slash.
-Set the Twitch values and paste the generated encryption key. Changing that key
-after an account connects makes its stored credentials unreadable; keep an
-encrypted backup.
+Set the Twitch values, paste the generated encryption key, and put every Twitch
+login allowed to use the instance in `TWITCH_ALLOWED_USERS`. A configured
+production server refuses to start without that allowlist, preventing public
+account enrollment. Changing the encryption key after an account connects makes
+its stored credentials unreadable; keep an encrypted backup.
 
 For local development:
 
@@ -45,6 +47,16 @@ For Docker:
 docker compose up -d --build
 docker compose logs -f openstreamalert
 ```
+
+Compose binds to `127.0.0.1` by default so the unencrypted application is not
+accidentally exposed to the network. Set `BIND_ADDRESS` in `.env` only when a
+trusted firewall or reverse proxy requires another interface. `PORT` controls
+the host-side port; the container always listens on 5173. The service runs as a
+non-root user with a read-only root filesystem and writes only to its data volume.
+
+`GET /livez` reports process liveness. `GET /readyz` verifies SQLite readiness
+and reports demo/Twitch mode plus `BUILD_VERSION`; use it for deployment health
+checks. These endpoints intentionally contain no account or chat data.
 
 Back up the Docker volume or the configured `DATABASE_PATH`. SQLite uses WAL;
 use a SQLite-aware backup or stop the service before copying its database files.
@@ -76,8 +88,9 @@ In OBS 31 or later:
 7. Leave audio routing off and set **Page Permissions** to None if available.
 
 Resize the browser viewport in its properties; avoid enlarging an 800×600 source
-with an OBS transform because that softens text. Use **Refresh cache of current
-page** after changing saved settings or when troubleshooting.
+with an OBS transform because that softens text. Saved settings stream into an
+open Browser Source automatically. Use **Refresh cache of current page** only
+when troubleshooting.
 
 The design studio is interactive in a normal browser. OBS's Browser Source is
 intended as output; right-click it and choose **Interact** only for diagnostics.

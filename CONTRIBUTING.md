@@ -39,4 +39,8 @@ and 1920 px widths, with reduced motion, and in OBS 31+ when possible.
 Keep commits focused and explain trust-boundary changes in the pull request.
 Never include real Twitch credentials, overlay URLs, `.env`, or database files.
 
+Release candidates must also pass the live Twitch and OBS gate in the
+[release checklist](docs/RELEASING.md). Demo-mode tests alone do not certify the
+production integration.
+
 By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

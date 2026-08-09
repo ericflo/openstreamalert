@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/ericflo/openstreamalert/actions/workflows/ci.yml/badge.svg)](https://github.com/ericflo/openstreamalert/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-a78bfa.svg)](LICENSE)
-[![Node 22+](https://img.shields.io/badge/node-22%2B-67e8b0.svg)](package.json)
+[![Node 24+](https://img.shields.io/badge/node-24%2B-67e8b0.svg)](package.json)
 
 </div>
 
@@ -40,7 +40,7 @@ analytics, and does not put Twitch credentials in the OBS URL.
 
 ## Quick start
 
-You need [Node.js 22+](https://nodejs.org/) and a Twitch application. In the
+You need [Node.js 24+](https://nodejs.org/) and a Twitch application. In the
 [Twitch developer console](https://dev.twitch.tv/console/apps), create an app
 with this OAuth redirect URL:
 
@@ -83,7 +83,9 @@ overlay URL like a stream key and rotate it in the studio if it leaks.
 Every theme responds to arbitrary OBS dimensions and shares controls for
 typeface, scale, background opacity, accent, message lifetime/count, entrance
 motion, alignment, direction, badges, timestamps, replies, readable username
-colors, and command hiding. Reduced-motion system preferences are honored.
+colors, notices, commands, and user/phrase blocking. Settings update open OBS
+sources live, can be exported as versioned JSON, and honor reduced-motion system
+preferences.
 
 ## Docker
 
@@ -112,8 +114,9 @@ flowchart LR
 The React studio and overlay ship from the same Express service. The server
 uses Twitch's authorization-code flow and requests only `user:read:chat`. OBS
 receives an unguessable, revocable overlay key—not an OAuth credential. One
-EventSub connection exists only while an overlay is watching, and events are
-normalized into a small safe rendering model before they reach the browser.
+EventSub connection exists while a studio preview or overlay is watching, and
+events are normalized into a small safe rendering model before they reach the
+browser.
 
 Read [architecture](docs/ARCHITECTURE.md), [privacy and data flow](docs/PRIVACY.md),
 and the source-backed [research notes](docs/RESEARCH.md) for the details.
@@ -125,16 +128,20 @@ and the source-backed [research notes](docs/RESEARCH.md) for the details.
 - [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 - [Privacy and data lifecycle](docs/PRIVACY.md)
 - [Product scope and principles](docs/PRODUCT.md)
+- [Release gates and live acceptance checklist](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)
 
 ## Status and roadmap
 
-OpenStreamAlert is an early, working release. The Twitch connection requires a
-real developer application and account, so maintainers should validate that
-path in an actual OBS scene before tagging a stable release.
+OpenStreamAlert is working pre-release software, with no tagged release yet.
+Automated tests cover its demo and container paths, but the Twitch connection
+requires a real developer application and account. The live OAuth → EventSub →
+OBS acceptance checklist must pass before any release is tagged; see
+[Releasing](docs/RELEASING.md).
 
 The next priorities are packaged desktop/local setup, third-party emote adapters
-(7TV, BTTV, FFZ), config export/import, and richer connection diagnostics.
+(7TV, BTTV, FFZ), multiple simultaneous scene profiles, and richer operator
+diagnostics.
 Follows, subscriptions, raids, and other alerts come after the chat experience
 is stable and delightful; multi-platform aggregation and a drag-and-drop canvas
 are intentionally out of scope for version one.

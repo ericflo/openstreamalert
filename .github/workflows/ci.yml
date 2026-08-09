@@ -25,7 +25,7 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run check
-      - run: npm test
+      - run: npm run test:coverage
       - run: npm run build
 
   browser:
@@ -40,14 +40,61 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: npm run test:e2e
+      - name: Upload browser test artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
 
   container:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Validate Compose deployment
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
           context: .
+          load: true
           push: false
           tags: openstreamalert:test
+          build-args: |
+            VERSION=ci-${{ github.sha }}
+            REVISION=${{ github.sha }}
+            CREATED=${{ github.event.repository.updated_at }}
+      - name: Boot and verify the production image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name openstreamalert-ci \
+            --init \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            --publish 127.0.0.1:5173:5173 \
+            openstreamalert:test
+          trap 'docker logs openstreamalert-ci; docker rm --force openstreamalert-ci' EXIT
+
+          for _ in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:5173/readyz > ready.json; then
+              break
+            fi
+            if ! docker inspect --format '{{.State.Running}}' openstreamalert-ci | grep -qx true; then
+              echo "Container exited before becoming ready"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          curl --fail --silent --show-error http://127.0.0.1:5173/livez
+          curl --fail --silent --show-error http://127.0.0.1:5173/api/status > status.json
+          node -e "const fs=require('node:fs'); const ready=JSON.parse(fs.readFileSync('ready.json')); const status=JSON.parse(fs.readFileSync('status.json')); if (!ready.ok || ready.database !== true || ready.version !== 'ci-${{ github.sha }}' || status.configured !== false) process.exit(1)"
