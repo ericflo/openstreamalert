@@ -72,6 +72,8 @@ const authErrors: Record<string, string> = {
     "This Twitch account is not allowed to use this private instance.",
 };
 
+const publicDemo = import.meta.env.VITE_PUBLIC_DEMO === "1";
+
 function Toggle({
   checked,
   onChange,
@@ -175,6 +177,17 @@ export function Studio() {
   }, [status?.account]);
 
   async function loadStatus() {
+    if (publicDemo) {
+      setStatus({
+        configured: false,
+        account: null,
+        overlay: null,
+        connection: null,
+        version: "public-demo",
+      });
+      setFeedStatus({ state: "idle" });
+      return;
+    }
     try {
       const response = await fetch("/api/status");
       if (!response.ok) throw new Error("The studio server is unavailable.");
@@ -251,7 +264,7 @@ export function Studio() {
   function overlayUrl() {
     return (
       status?.overlay?.url ??
-      `${window.location.origin}/overlay/demo?demo=1&config=${encodeSettings(settings)}`
+      `${new URL("overlay/demo", document.baseURI).toString()}?demo=1&config=${encodeSettings(settings)}`
     );
   }
 
@@ -468,12 +481,18 @@ export function Studio() {
                 <span className="twitch-icon">✦</span>
                 <div>
                   <small>
-                    {status.configured ? "Ready when you are" : "Demo studio"}
+                    {status.configured
+                      ? "Ready when you are"
+                      : publicDemo
+                        ? "Public demo"
+                        : "Demo studio"}
                   </small>
                   <strong>
                     {status.configured
                       ? "Connect Twitch"
-                      : "Twitch setup needed"}
+                      : publicDemo
+                        ? "Try every design control"
+                        : "Twitch setup needed"}
                   </strong>
                 </div>
                 {status.configured ? (

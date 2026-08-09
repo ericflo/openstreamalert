@@ -883,9 +883,11 @@ footer {
 .preset-terminal .separator::before {
   content: ">";
   color: var(--accent);
-  margin-right: 0.25em;
+  margin: 0 0.25em;
+  font-size: var(--font-size);
 }
 .preset-terminal .separator {
+  margin-right: 0;
   font-size: 0;
 }
 .overlay-status {

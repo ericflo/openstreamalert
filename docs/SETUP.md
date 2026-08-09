@@ -48,6 +48,13 @@ docker compose up -d --build
 docker compose logs -f openstreamalert
 ```
 
+### Public demo without Twitch credentials
+
+A design-only server needs no Twitch application. Leave all Twitch fields and
+`ENCRYPTION_KEY` empty, set the public HTTPS `APP_URL`, and start normally;
+`/readyz` reports `mode: "demo"` and live chat remains disabled. For a static,
+zero-server deployment, use the [GitHub Pages public demo](PUBLIC_DEMO.md).
+
 Compose binds to `127.0.0.1` by default so the unencrypted application is not
 accidentally exposed to the network. Set `BIND_ADDRESS` in `.env` only when a
 trusted firewall or reverse proxy requires another interface. `PORT` controls

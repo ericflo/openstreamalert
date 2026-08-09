@@ -1,0 +1,44 @@
+name: Public demo
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.event.repository.visibility == 'public'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build the credential-free studio
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_PUBLIC_DEMO: "1"
+        run: |
+          npm run build
+          cp dist/client/index.html dist/client/404.html
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v4
+        with:
+          path: dist/client
+      - name: Deploy public demo
+        id: deployment
+        uses: actions/deploy-pages@f5a691325ee5d2a31178033a5e7cc7c5a836d987 # v4

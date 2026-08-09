@@ -40,9 +40,10 @@ analytics, and does not put Twitch credentials in the OBS URL.
 
 ## Quick start
 
-You need [Node.js 24+](https://nodejs.org/) and a Twitch application. In the
-[Twitch developer console](https://dev.twitch.tv/console/apps), create an app
-with this OAuth redirect URL:
+You need [Node.js 24+](https://nodejs.org/). The credential-free design studio
+works immediately; live chat also needs a Twitch application. In the [Twitch
+developer console](https://dev.twitch.tv/console/apps), create an app with this
+OAuth redirect URL:
 
 ```text
 http://localhost:5173/auth/callback
@@ -100,6 +101,14 @@ SQLite data lives in the named `openstreamalert-data` volume. Put a TLS reverse
 proxy in front of the app for any non-local deployment. See the
 [deployment and OBS guide](docs/SETUP.md) before exposing an instance publicly.
 
+To publish only the interactive design demo, leave all three Twitch credential
+fields and `ENCRYPTION_KEY` empty. The same production image then serves presets,
+preview messages, import/export, and demo Browser Source URLs without OAuth,
+accounts, or live chat. Set the public `APP_URL` and use HTTPS exactly as you
+would for a connected deployment.
+
+For the zero-server GitHub Pages variant, see the [public demo guide](docs/PUBLIC_DEMO.md).
+
 ## How it works
 
 ```mermaid
@@ -128,6 +137,7 @@ and the source-backed [research notes](docs/RESEARCH.md) for the details.
 - [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 - [Privacy and data lifecycle](docs/PRIVACY.md)
 - [Product scope and principles](docs/PRODUCT.md)
+- [Credential-free public demo deployment](docs/PUBLIC_DEMO.md)
 - [Release gates and live acceptance checklist](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)
 
@@ -159,6 +169,7 @@ npm run lint
 npm test             # unit tests
 npm run build
 npm run test:e2e     # real Chromium tests (run playwright install first)
+npm run test:demo    # static GitHub Pages build and direct overlay route
 ```
 
 OpenStreamAlert is available under the [MIT License](LICENSE).
