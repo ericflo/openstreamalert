@@ -176,6 +176,7 @@ and the source-backed [research notes](docs/RESEARCH.md) for the details.
 - [Credential-free Twitch CLI protocol test](docs/TWITCH_CLI_TESTING.md)
 - [Release gates and live acceptance checklist](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)
+- [Community support and reporting routes](SUPPORT.md)
 
 ## Status and roadmap
 

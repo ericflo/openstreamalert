@@ -18,8 +18,7 @@ concurrency:
 jobs:
   analyze:
     name: Analyze JavaScript and TypeScript
-    # GitHub code scanning is unavailable to this private repository without
-    # GHAS. The workflow activates automatically when the project becomes public.
+    # Code scanning is available to this public open-source repository.
     if: github.event.repository.visibility == 'public'
     runs-on: ubuntu-latest
     permissions:
