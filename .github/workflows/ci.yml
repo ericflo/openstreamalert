@@ -99,10 +99,9 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:5173/api/status > status.json
           node -e "const fs=require('node:fs'); const ready=JSON.parse(fs.readFileSync('ready.json')); const status=JSON.parse(fs.readFileSync('status.json')); if (!ready.ok || ready.database !== true || ready.version !== 'ci-${{ github.sha }}' || status.configured !== false) process.exit(1)"
       - name: Scan the final image
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
-        with:
-          image-ref: openstreamalert:test
-          format: table
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+        run: |
+          docker run --rm \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.68.1@sha256:a93fd67162843c0f749002af9245fe9a2e5edc41445bd71d3949c803e95ef05b \
+            image --scanners vuln --skip-version-check --ignore-unfixed \
+            --severity HIGH,CRITICAL --exit-code 1 openstreamalert:test
