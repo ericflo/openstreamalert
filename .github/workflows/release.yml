@@ -80,7 +80,9 @@ jobs:
           done
 
   windows:
-    runs-on: windows-latest
+    # Keep native-module rebuilds on Electron's supported Visual Studio 2022
+    # toolchain until its node-gyp fork recognizes Visual Studio 18.
+    runs-on: windows-2022
     env:
       TWITCH_DESKTOP_CLIENT_ID: ${{ vars.TWITCH_DESKTOP_CLIENT_ID }}
       WINDOWS_SIGNER_SUBJECT: ${{ vars.WINDOWS_SIGNER_SUBJECT }}

@@ -82,7 +82,9 @@ jobs:
       - run: npm run test:twitch-cli
 
   windows-desktop:
-    runs-on: windows-latest
+    # Electron's current node-gyp toolchain supports Visual Studio 2022. Pin the
+    # image until it also recognizes the Visual Studio 18 toolchain on win25.
+    runs-on: windows-2022
     env:
       TWITCH_DESKTOP_CLIENT_ID: ${{ vars.TWITCH_DESKTOP_CLIENT_ID }}
     steps:

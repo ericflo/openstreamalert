@@ -7,7 +7,7 @@ client secret are not required.
 
 OpenStreamAlert is still pre-release, so a signed public installer is not yet
 published. The repository already builds and smoke-tests the complete Windows
-package on `windows-latest`; the live Windows/Twitch/OBS acceptance gate and code
+package on a pinned Windows 2022 toolchain; the live Windows/Twitch/OBS acceptance gate and code
 signing must pass before that artifact becomes a supported download.
 
 ## Streamer quick start
@@ -48,8 +48,10 @@ reusable client secret is intentionally absent.
 
 ## Build an installer from source
 
-Install Git and Node.js 24. The supported x64 build uses a prebuilt SQLite
-native module, so Visual Studio build tools are not part of the normal path.
+Install Git and Node.js 24. npm can rebuild the bundled SQLite native module, so
+source builds may also require Visual Studio 2022 Build Tools with the **Desktop
+development with C++** workload. People using the published installer do not
+need Node, npm, or Visual Studio.
 Register a **public** Twitch application following
 Twitch's [authentication guidance](https://dev.twitch.tv/docs/authentication/),
 then use its client ID—never a client secret—from PowerShell:
