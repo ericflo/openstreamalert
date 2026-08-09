@@ -149,6 +149,7 @@ and the source-backed [research notes](docs/RESEARCH.md) for the details.
 - [Privacy and data lifecycle](docs/PRIVACY.md)
 - [Product scope and principles](docs/PRODUCT.md)
 - [Credential-free public demo deployment](docs/PUBLIC_DEMO.md)
+- [Credential-free Twitch CLI protocol test](docs/TWITCH_CLI_TESTING.md)
 - [Release gates and live acceptance checklist](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)
 
@@ -181,6 +182,7 @@ npm test             # unit tests
 npm run build
 npm run test:e2e     # real Chromium tests (run playwright install first)
 npm run test:demo    # static GitHub Pages build and direct overlay route
+npm run test:twitch-cli # official local EventSub transport (install Twitch CLI)
 ```
 
 OpenStreamAlert is available under the [MIT License](LICENSE).

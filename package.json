@@ -28,6 +28,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:demo": "playwright test --config playwright.demo.config.ts",
+    "test:twitch-cli": "vitest run --config vitest.twitch-cli.config.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

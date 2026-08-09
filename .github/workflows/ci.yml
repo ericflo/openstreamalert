@@ -55,6 +55,32 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  twitch-protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install checksum-verified Twitch CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/twitch-cli.tar.gz"
+          install_dir="${RUNNER_TEMP}/twitch-cli"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            https://github.com/twitchdev/twitch-cli/releases/download/v1.1.24/twitch-cli_1.1.24_Linux_x86_64.tar.gz
+          echo "9cae4e9cd52e66fb4dda6b633b3276a4450a28a83dea7a4651a42a67372eed8f  $archive" \
+            | sha256sum --check --strict
+          mkdir --parents "$install_dir"
+          tar --extract --gzip --file "$archive" --directory "$install_dir" \
+            --strip-components=1
+          echo "TWITCH_CLI_BIN=${install_dir}/twitch" >> "$GITHUB_ENV"
+      - run: npm run test:twitch-cli
+
   container:
     runs-on: ubuntu-latest
     steps:

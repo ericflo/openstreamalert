@@ -33,8 +33,10 @@ npm run test:e2e
 
 Install Chromium once with `npx playwright install chromium`. Twitch behavior
 changes should include fixture-based unit coverage and be checked against
-official current documentation. Visual changes should be tested at 320, 500,
-and 1920 px widths, with reduced motion, and in OBS 31+ when possible.
+official current documentation. For connection-state changes, also run the
+credential-free [Twitch CLI protocol test](docs/TWITCH_CLI_TESTING.md). Visual
+changes should be tested at 320, 500, and 1920 px widths, with reduced motion,
+and in OBS 31+ when possible.
 
 Keep commits focused and explain trust-boundary changes in the pull request.
 Never include real Twitch credentials, overlay URLs, `.env`, or database files.
