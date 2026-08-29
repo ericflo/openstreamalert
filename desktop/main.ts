@@ -296,7 +296,9 @@ function desktopIcon() {
   const names =
     process.platform === "win32" ? ["icon.ico"] : ["icon.png", "icon.ico"];
   for (const name of names) {
-    const icon = nativeImage.createFromPath(path.join(process.resourcesPath, name));
+    const icon = nativeImage.createFromPath(
+      path.join(process.resourcesPath, name),
+    );
     if (!icon.isEmpty()) return icon;
   }
   return nativeImage.createEmpty();
