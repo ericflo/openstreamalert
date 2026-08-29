@@ -292,10 +292,16 @@ async function quitCleanly() {
 }
 
 function desktopIcon() {
-  const icon = nativeImage.createFromPath(
-    path.join(process.resourcesPath, "icon.ico"),
-  );
-  return icon.isEmpty() ? nativeImage.createEmpty() : icon;
+  // Linux nativeImage cannot decode .ico; prefer the PNG there.
+  const names =
+    process.platform === "win32" ? ["icon.ico"] : ["icon.png", "icon.ico"];
+  for (const name of names) {
+    const icon = nativeImage.createFromPath(
+      path.join(process.resourcesPath, name),
+    );
+    if (!icon.isEmpty()) return icon;
+  }
+  return nativeImage.createEmpty();
 }
 
 function allowedExternalUrl(value: string) {

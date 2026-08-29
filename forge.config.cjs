@@ -20,6 +20,7 @@ module.exports = {
     extraResource: [
       path.join(__dirname, "dist", "desktop-config.json"),
       path.join(__dirname, "desktop", "assets", "icon.ico"),
+      path.join(__dirname, "desktop", "assets", "icon.png"),
     ],
     ignore: [
       /^\/(?:\.git|\.github|coverage|data|docs|out|playwright-report|scripts|server|shared|src|test-results|tests)(?:\/|$)/,
