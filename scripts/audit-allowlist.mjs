@@ -41,6 +41,7 @@ let report;
 try {
   const raw = execFileSync("npm", ["audit", "--audit-level=high", "--json"], {
     encoding: "utf8",
+    shell: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
   report = JSON.parse(raw);
